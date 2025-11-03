@@ -1,9 +1,9 @@
 import numpy, random
-
+from ga_parameters import CROSSOVER_RATE, TOURNAMENT_K
 
 def population_reproduce(genotypes, elite):
     ### Define crossover rate (integer number between 0 and 100)
-    cp = 50  # 50% crossover rate
+    cp = CROSSOVER_RATE
     genotypes_not_ranked = genotypes
     # Rank: lowest to highest fitness
     genotypes = rankPopulation(genotypes)
@@ -52,7 +52,7 @@ def selectParent(genotypes):
     # Select a few individuals of the population randomly
     group = []
     population_size = len(genotypes)
-    number_individuals = 5
+    number_individuals = TOURNAMENT_K
     for selected in range(0, number_individuals - 1):
         group.append(genotypes[random.choice([0, population_size - 1])])
     # Then, select the best individual of this group

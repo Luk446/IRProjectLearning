@@ -6,6 +6,8 @@ import numpy, struct
 import ga, os
 import sys
 
+from ga_parameters import NUM_GENERATIONS, POPULATION_SIZE, NUM_ELITE, INITIAL_ROT, INITIAL_TRANS, DEMO_INITIAL_TRANS, DEMO_INITIAL_ROT
+
 
 class SupervisorGA:
     def __init__(self):
@@ -37,9 +39,9 @@ class SupervisorGA:
         self.emitterData = ""
 
         ### Define here the GA Parameters
-        self.num_generations = 10
-        self.num_population = 20
-        self.num_elite = 10
+        self.num_generations = NUM_GENERATIONS
+        self.num_population = POPULATION_SIZE
+        self.num_elite = NUM_ELITE
 
         # size of the genotype variable
         self.num_weights = 0
@@ -108,9 +110,7 @@ class SupervisorGA:
         self.emitterData = str(genotype)
 
         # Reset robot position and physics
-        INITIAL_TRANS = [0.47, 0.16, 0]
         self.trans_field.setSFVec3f(INITIAL_TRANS)
-        INITIAL_ROT = [0, 0, 1, 1.57]
         self.rot_field.setSFRotation(INITIAL_ROT)
         self.robot_node.resetPhysics()
 
@@ -132,9 +132,7 @@ class SupervisorGA:
         self.emitterData = str(genotype)
 
         # Reset robot position and physics
-        INITIAL_TRANS = [4.48, 0, 7.63]
         self.trans_field.setSFVec3f(INITIAL_TRANS)
-        INITIAL_ROT = [0, 1, 0, -0.0]
         self.rot_field.setSFRotation(INITIAL_ROT)
         self.robot_node.resetPhysics()
 
@@ -214,9 +212,9 @@ if __name__ == "__main__":
     print("(R|r)un Best Individual or (S|s)earch for New Best Individual:")
     while gaModel.supervisor.step(gaModel.time_step) != -1:
         resp = keyboard.getKey()
-        if resp == 83 or resp == 65619:
+        if resp == 83 or resp == 65619: # S or s key
             gaModel.run_optimization()
-            print("(R|r)un Best Individual or (S|s)earch for New Best Individual:")
-        elif resp == 82 or resp == 65619:
+            print("Optimization: (R|r)un Best Individual or (S|s)earch for New Best Individual:")
+        elif resp == 82 or resp == 65619: # R or r key
             gaModel.run_demo()
-            print("(R|r)un Best Individual or (S|s)earch for New Best Individual:")
+            print("Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:")
