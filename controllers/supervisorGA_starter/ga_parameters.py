@@ -1,4 +1,4 @@
-NUM_GENERATIONS = 20  # Total number of generations to run
+NUM_GENERATIONS = 6  # Total number of generations to run
 POPULATION_SIZE = 10  # Total number of individuals in the population
 NUM_ELITE = 5  # Number of elite individuals to carry over to the next generation
 TOURNAMENT_K = 3  # Number of individuals in tournament selection

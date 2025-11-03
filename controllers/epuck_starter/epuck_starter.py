@@ -1,4 +1,4 @@
-from controller import Robot, Receiver, Emitter, Motor, DistanceSensor
+from controller import Robot, Receiver, Emitter, Motor, DistanceSensor # type: ignore
 import sys, struct, math
 import numpy as np
 import mlp as ntw
@@ -153,12 +153,19 @@ class Controller:
         self.right_motor.setVelocity(self.velocity_right * 3)
 
     def calculate_fitness(self):
+
         ### Define the fitness function to increase the speed of the robot and
         ### to encourage the robot to move forward only
+
         # Get the left and right wheel speeds
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
-        forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
+        # Only reward when both wheels move forward and at similar speeds
+        if left_speed > 0 and right_speed > 0:
+            # Use the minimum of the two speeds to encourage balanced forward motion
+            forwardFitness = min(left_speed, right_speed) / self.max_speed
+        else:
+            forwardFitness = 0
 
         ### Define the fitness function to encourage the robot to follow the line
         # get ground sensors values - 760 is white, 300 is black
@@ -173,6 +180,7 @@ class Controller:
         avoidCollisionFitness = 0
         # Get front distance sensors values
         # print([self.proximity_sensors[i].getValue() for i in range(8)])
+        # sensors 0 and 7 are the front right and front left sensors
         front_right_ds = self.proximity_sensors[0].getValue()
         front_left_ds = self.proximity_sensors[7].getValue()
         # If an obstacle is detected in front of the robot reduce fitness
@@ -187,16 +195,24 @@ class Controller:
 
         ### Define the fitness function to avoid spining behaviour
         spinningFitness = 0
-        # Discourage negative correlation between wheel speeds
-        if left_speed * right_speed < 0:
-            spinningFitness = -3
+        # Strongly discourage large differences between wheel speeds
+        speed_difference = abs(left_speed - right_speed)
+        # Apply a quadratic penalty for speed differences
+        spinningFitness = -0.5 * (speed_difference ** 2)
+
+        ### Define the fitness function to avoid moving backwards
+        negativefitness = 0
+        # Penalize when wheels move in opposite directions (product is negative)
+        if (left_speed * right_speed) < 0:
+            negativefitness = -4
+
 
         ### Encourage exploration
         # print(self.left_motor.getPositionSensor().getValue())
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = (
-            forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness
+            forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness + negativefitness
         )
 
         self.fitness_values.append(combinedFitness)
