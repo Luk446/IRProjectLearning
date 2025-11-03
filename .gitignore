@@ -1,1 +1,3 @@
 .Track.wbproj
+__pycache__/
+.DS_Store
