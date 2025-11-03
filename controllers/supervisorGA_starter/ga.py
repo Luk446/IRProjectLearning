@@ -1,5 +1,5 @@
 import numpy, random
-from ga_parameters import CROSSOVER_RATE, TOURNAMENT_K
+from ga_parameters import CROSSOVER_RATE, TOURNAMENT_K, MUTATION_RATE
 
 def population_reproduce(genotypes, elite):
     ### Define crossover rate (integer number between 0 and 100)
@@ -78,7 +78,7 @@ def mutation(child):
     # Changes a single gene randomly
     after_mutation = []
     ### Define mutation percentage (integer number between 0 and 100)
-    mp = 30  # 30% mutation rate
+    mp = MUTATION_RATE
     for gene in range(len(child)):
         if random.randint(1, 100) < mp:
             # The random value to be added to the gene

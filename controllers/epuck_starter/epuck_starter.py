@@ -1,14 +1,14 @@
-from controller import Robot, Receiver, Emitter
+from controller import Robot, Receiver, Emitter, Motor, DistanceSensor
 import sys, struct, math
 import numpy as np
 import mlp as ntw
-
+from typing import List
 
 class Controller:
-    def __init__(self, robot):
+    def __init__(self, robot: Robot):
         # Robot Parameters
         # Please, do not change these parameters
-        self.robot = robot
+        self.robot: Robot = robot
         self.time_step = 32  # ms
         self.max_speed = 1  # m/s
 
@@ -48,8 +48,8 @@ class Controller:
                 )
 
         # Enable Motors
-        self.left_motor = self.robot.getDevice("left wheel motor")
-        self.right_motor = self.robot.getDevice("right wheel motor")
+        self.left_motor: Motor = self.robot.getDevice("left wheel motor")
+        self.right_motor: Motor = self.robot.getDevice("right wheel motor")
         self.left_motor.setPosition(float("inf"))
         self.right_motor.setPosition(float("inf"))
         self.left_motor.setVelocity(0.0)
@@ -58,18 +58,18 @@ class Controller:
         self.velocity_right = 0
 
         # Enable Proximity Sensors
-        self.proximity_sensors = []
+        self.proximity_sensors: List[DistanceSensor] = []
         for i in range(8):
             sensor_name = "ps" + str(i)
             self.proximity_sensors.append(self.robot.getDevice(sensor_name))
             self.proximity_sensors[i].enable(self.time_step)
 
         # Enable Ground Sensors
-        self.left_ir = self.robot.getDevice("gs0")
+        self.left_ir: DistanceSensor = self.robot.getDevice("gs0")
         self.left_ir.enable(self.time_step)
-        self.center_ir = self.robot.getDevice("gs1")
+        self.center_ir: DistanceSensor = self.robot.getDevice("gs1")
         self.center_ir.enable(self.time_step)
-        self.right_ir = self.robot.getDevice("gs2")
+        self.right_ir: DistanceSensor = self.robot.getDevice("gs2")
         self.right_ir.enable(self.time_step)
 
         # Enable Emitter and Receiver (to communicate with the Supervisor)
@@ -155,16 +155,44 @@ class Controller:
     def calculate_fitness(self):
         ### Define the fitness function to increase the speed of the robot and
         ### to encourage the robot to move forward only
-        forwardFitness = 10
+        # Get the left and right wheel speeds
+        left_speed = self.left_motor.getVelocity()
+        right_speed = self.right_motor.getVelocity()
+        forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
 
         ### Define the fitness function to encourage the robot to follow the line
-        followLineFitness = 0
+        # get ground sensors values - 760 is white, 300 is black
+        left = self.left_ir.getValue() < 700
+        center = self.center_ir.getValue() < 700
+        right = self.right_ir.getValue() < 700
+        # Fitness is 0, 1, 2 or 3 depending on how many sensors are on the line
+        followLineFitness = left + right + center
+        followLineFitness = followLineFitness * 5
 
         ### Define the fitness function to avoid collision
         avoidCollisionFitness = 0
+        # Get front distance sensors values
+        # print([self.proximity_sensors[i].getValue() for i in range(8)])
+        front_right_ds = self.proximity_sensors[0].getValue()
+        front_left_ds = self.proximity_sensors[7].getValue()
+        # If an obstacle is detected in front of the robot reduce fitness
+        threshold = 80  # Adjust this threshold value as needed
+        maximum_proximity_value = 2000
+        # Avoid sensor noise
+        if front_left_ds < maximum_proximity_value and front_right_ds < maximum_proximity_value:
+            if front_left_ds > threshold or front_right_ds > threshold:
+                # Penalty for being too close to an obstacle
+                too_close_penalty = (front_left_ds + front_right_ds) / 100
+                avoidCollisionFitness = -2 - too_close_penalty
 
         ### Define the fitness function to avoid spining behaviour
         spinningFitness = 0
+        # Discourage negative correlation between wheel speeds
+        if left_speed * right_speed < 0:
+            spinningFitness = -3
+
+        ### Encourage exploration
+        # print(self.left_motor.getPositionSensor().getValue())
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = (

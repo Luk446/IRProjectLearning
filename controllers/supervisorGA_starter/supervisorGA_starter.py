@@ -126,6 +126,7 @@ class SupervisorGA:
         return fitness
 
     def run_demo(self):
+        print("Running Best Individual Demo ...\n")
         # Read File
         genotype = numpy.load("Best.npy")
         # Send Genotype to controller
