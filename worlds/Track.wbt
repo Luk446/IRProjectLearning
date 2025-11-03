@@ -1,0 +1,123 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/BrushedAluminium.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/gctronic/e-puck/protos/E-puck.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/gctronic/e-puck/protos/E-puckGroundSensors.proto"
+
+WorldInfo {
+}
+Viewpoint {
+  orientation -0.37428015288405947 0.4932145508395301 0.7852730569663303 1.5365946494615685
+  position -0.4904105901695589 -2.4146719900387783 2.4371399950870885
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+DEF Controller E-puck {
+  hidden position_0_0 3.0607228865996967e-08
+  hidden position_0_1 -3.060721187608806e-08
+  hidden rotation_1 0 1 0 2.9802322387695313e-08
+  hidden rotation_2 0 -1 0 2.9802322387695313e-08
+  translation 0.4699999999822612 0.15999999999999992 -6.396199578989452e-05
+  rotation 1.2215812462900871e-09 1.2215897296616667e-09 1 1.5708000000000002
+  controller "epuck_starter"
+  emitter_channel 20
+  receiver_channel 19
+  groundSensorsSlot [
+    E-puckGroundSensors {
+    }
+  ]
+}
+RectangleArena {
+  floorSize 1.5 1.5
+  floorTileSize 1.5 1.5
+  floorAppearance PBRAppearance {
+    baseColorMap ImageTexture {
+      url [
+        "textures/arena.png"
+      ]
+    }
+    roughness 1
+    metalness 0
+  }
+  wallThickness 0.05
+  wallHeight 0.05
+  wallAppearance BrushedAluminium {
+    colorOverride 1 0.5 0.4
+  }
+}
+DEF obstacle3 Solid {
+  translation 0 0.56 0.02
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 1 0.6 0
+        roughness 1
+        metalness 0
+      }
+      geometry DEF Box3 Cylinder {
+        height 0.04
+        radius 0.03
+      }
+    }
+  ]
+  name "YellowBox"
+  boundingObject USE Box3
+}
+DEF GA Robot {
+  children [
+    Emitter {
+      channel 19
+    }
+    Display {
+      width 500
+      height 150
+    }
+    Receiver {
+      channel 20
+    }
+  ]
+  name "Supervisor"
+  controller "supervisorGA_starter"
+  supervisor TRUE
+}
+DEF obstacle1 Solid {
+  translation -1.03525e-09 -0.58 0.02
+  rotation 0 0 1 0.785394
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.1 0.5 0.3
+        roughness 1
+        metalness 0
+      }
+      geometry DEF Box1 Box {
+        size 0.05 0.05 0.05
+      }
+    }
+  ]
+  name "GreenBox"
+  boundingObject USE Box1
+}
+DEF obstacle2 Solid {
+  translation -0.5 0 0.02
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0 0.5 0.9
+        roughness 1
+        metalness 0
+      }
+      geometry DEF Box2 Cylinder {
+        height 0.04
+        radius 0.03
+      }
+    }
+  ]
+  name "BlueCylinder"
+  boundingObject USE Box2
+}
