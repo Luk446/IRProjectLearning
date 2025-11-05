@@ -6,7 +6,7 @@ import numpy, struct
 import ga, os
 import sys
 
-from ga_parameters import NUM_GENERATIONS, POPULATION_SIZE, NUM_ELITE, INITIAL_ROT, INITIAL_TRANS, DEMO_INITIAL_TRANS, DEMO_INITIAL_ROT
+from ga_parameters import NUM_GENERATIONS, POPULATION_SIZE, NUM_ELITE, INITIAL_ROT, INITIAL_TRANS
 
 
 class SupervisorGA:

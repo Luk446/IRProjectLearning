@@ -1,8 +1,14 @@
-from controller import Robot, Receiver, Emitter, Motor, DistanceSensor
-import sys, struct, math
+from controller import Robot, Motor, DistanceSensor
 import numpy as np
 import mlp as ntw
 from typing import List
+
+HIDDEN_LAYERS = [16]
+MIN_GROUND_SENSOR_VALUE = 280
+MAX_GROUND_SENSOR_VALUE = 760
+MIN_DISTANCE_SENSOR_VALUE = 80
+MAX_DISTANCE_SENSOR_VALUE = 1000
+PRINT_EVERY = 2000  # Print every n steps
 
 class Controller:
     def __init__(self, robot: Robot):
@@ -20,7 +26,7 @@ class Controller:
         self.number_input_layer = 11  # 8 proximity + 3 ground sensors
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
-        self.number_hidden_layer = [32, 16]
+        self.number_hidden_layer = HIDDEN_LAYERS
         self.number_output_layer = 2
 
         # Create a list with the number of neurons per layer
@@ -84,6 +90,14 @@ class Controller:
         self.fitness_values = []
         self.fitness = 0
 
+        # Add line tracking
+        self.steps_on_line = 0
+        self.max_steps_on_line = 0
+        self.steps_on_white = 0
+        self.max_steps_on_white = 0
+
+        self.print_every = 0
+
     def check_for_new_genes(self):
         if self.flagMessage:
             # Split the list based on the number of layers of your network
@@ -130,8 +144,14 @@ class Controller:
                 data.append(weightsPart[n - 1])
             self.network.weights = data
 
-            # Reset fitness list
+            # Reset fitness and line tracking when getting new genes
             self.fitness_values = []
+            self.steps_on_line = 0
+            self.max_steps_on_line = 0
+            self.steps_on_white = 0
+            self.max_steps_on_white = 0
+
+            self.print_every = 0
 
     def clip_value(self, value, min_max):
         if value > min_max:
@@ -153,43 +173,78 @@ class Controller:
         self.right_motor.setVelocity(self.velocity_right * 3)
 
     def calculate_fitness(self):
+        self.print_every += 1
+        printing = False
+        if self.print_every >= PRINT_EVERY:
+            self.print_every = 0
+            printing = True
+
+        ### Define the fitness function to avoid collision
+        isColliding = False
+        avoidCollisionFitness = 0
+        # Get front distance sensors values
+        # If an obstacle is detected in front of the robot reduce fitness
+        obstacle_tolerance = 100
+        for ds in self.proximity_sensors:
+            ds_value = ds.getValue()
+            # Avoid sensor noise
+            if ds_value < MAX_DISTANCE_SENSOR_VALUE * 2:
+                if ds_value > MIN_DISTANCE_SENSOR_VALUE + obstacle_tolerance:
+                    # Penalty for being too close to an obstacle
+                    too_close_penalty = ds_value / 200
+                    if avoidCollisionFitness < too_close_penalty:
+                        avoidCollisionFitness = too_close_penalty
+                    # avoidCollisionFitness -= 3
+                    isColliding = True
+
+        avoidCollisionFitness = -avoidCollisionFitness
+
         ### Define the fitness function to increase the speed of the robot and
         ### to encourage the robot to move forward only
         # Get the left and right wheel speeds
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
         forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
+        forwardFitness *= 2
 
         ### Define the fitness function to encourage the robot to follow the line
         # get ground sensors values - 760 is white, 300 is black
         left = self.left_ir.getValue() < 700
-        center = self.center_ir.getValue() < 700
+        centre = self.center_ir.getValue() < 700
         right = self.right_ir.getValue() < 700
-        # Fitness is 0, 1, 2 or 3 depending on how many sensors are on the line
-        followLineFitness = left + right + center
-        followLineFitness = followLineFitness * 5
 
-        ### Define the fitness function to avoid collision
-        avoidCollisionFitness = 0
-        # Get front distance sensors values
-        # print([self.proximity_sensors[i].getValue() for i in range(8)])
-        front_right_ds = self.proximity_sensors[0].getValue()
-        front_left_ds = self.proximity_sensors[7].getValue()
-        # If an obstacle is detected in front of the robot reduce fitness
-        threshold = 80  # Adjust this threshold value as needed
-        maximum_proximity_value = 2000
-        # Avoid sensor noise
-        if front_left_ds < maximum_proximity_value and front_right_ds < maximum_proximity_value:
-            if front_left_ds > threshold or front_right_ds > threshold:
-                # Penalty for being too close to an obstacle
-                too_close_penalty = (front_left_ds + front_right_ds) / 100
-                avoidCollisionFitness = -2 - too_close_penalty
+        # Check if robot has lost the line
+        if not (left and centre and right) and not isColliding:
+            self.steps_on_line = 0
+            self.steps_on_white += 1
+            if self.steps_on_white > self.max_steps_on_white:
+                self.max_steps_on_white = self.steps_on_white
+        else:
+            self.steps_on_white = 0
+            self.steps_on_line += 1
+            if self.steps_on_line > self.max_steps_on_line:
+                self.max_steps_on_line = self.steps_on_line
 
-        ### Define the fitness function to avoid spining behaviour
+        # Calculate line following fitness with permanent penalty AND progress tracking
+        followLineFitness = 0
+        if not isColliding:
+            followLineFitness = (left + right + centre)  # Immediate reward
+            followLineFitness += min(self.max_steps_on_line / 100, 1)  # Progress reward
+
+            if followLineFitness <= 0:
+                followLineFitness -= 2
+
+        followLineFitness -= min((self.max_steps_on_white / 100) ** 2, 10)  # Penalty for time on white
+
+        ### Define the fitness function to avoid spinning behaviour
         spinningFitness = 0
         # Discourage negative correlation between wheel speeds
-        if left_speed * right_speed < 0:
-            spinningFitness = -3
+        if left_speed < 0 or right_speed < 0:
+            spinningFitness = -1
+        # Discourage large differences between wheel speeds
+        speed_difference = abs(left_speed - right_speed)
+        if speed_difference > 0.01:
+            spinningFitness -= speed_difference
 
         ### Encourage exploration
         # print(self.left_motor.getPositionSensor().getValue())
@@ -198,6 +253,14 @@ class Controller:
         combinedFitness = (
             forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness
         )
+
+        if printing:
+            print("Forward: {:.3f}, Follow Line: {:.3f}, Avoid Collision: {:.3f}, Spinning: {:.3f}".format(
+                forwardFitness,
+                followLineFitness,
+                avoidCollisionFitness,
+                spinningFitness,
+            ))
 
         self.fitness_values.append(combinedFitness)
         self.fitness = np.mean(self.fitness_values)
@@ -265,8 +328,8 @@ class Controller:
             # print("Ground Sensors \n    left {} center {} right {}".format(left,center,right))
 
             ### Please adjust the ground sensors values to facilitate learning
-            min_gs = 0
-            max_gs = 100
+            min_gs = MIN_GROUND_SENSOR_VALUE
+            max_gs = MAX_GROUND_SENSOR_VALUE
 
             if left > max_gs:
                 left = max_gs
@@ -303,8 +366,8 @@ class Controller:
                     temp = self.proximity_sensors[i].getValue()
 
                     ### Please adjust the distance sensors values to facilitate learning
-                    min_ds = 0
-                    max_ds = 100
+                    min_ds = MIN_DISTANCE_SENSOR_VALUE
+                    max_ds = MAX_DISTANCE_SENSOR_VALUE
 
                     if temp > max_ds:
                         temp = max_ds
@@ -312,7 +375,7 @@ class Controller:
                         temp = min_ds
 
                     # Normalize the values between 0 and 1 and save data
-                    self.inputs.append((temp - min_ds) / (max_ds - min_ds))
+                    self.inputs.append(max(0, (temp - min_ds) / (max_ds - min_ds)))
                     # print("Distance Sensors - Index: {}  Value: {}".format(i,self.proximity_sensors[i].getValue()))
 
             # GA Iteration
