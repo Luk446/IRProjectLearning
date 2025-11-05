@@ -4,6 +4,9 @@ import numpy as np
 import mlp as ntw
 from typing import List
 
+sys.path.append('../supervisorGA_starter')
+from ga_parameters import NUM_HIDDEN_LAYERS
+
 class Controller:
     def __init__(self, robot: Robot):
         # Robot Parameters
@@ -20,7 +23,7 @@ class Controller:
         self.number_input_layer = 11  # 8 proximity + 3 ground sensors
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
-        self.number_hidden_layer = [32, 16]
+        self.number_hidden_layer = NUM_HIDDEN_LAYERS
         self.number_output_layer = 2
 
         # Create a list with the number of neurons per layer
@@ -174,7 +177,7 @@ class Controller:
         right = self.right_ir.getValue() < 700
         # Fitness is 0, 1, 2 or 3 depending on how many sensors are on the line
         followLineFitness = left + right + center
-        followLineFitness = followLineFitness * 5
+        followLineFitness = followLineFitness * 10 # strengthen 
 
         ### Define the fitness function to avoid collision
         avoidCollisionFitness = 0
@@ -211,6 +214,10 @@ class Controller:
         # print(self.left_motor.getPositionSensor().getValue())
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
+
+        def print_fitness_values():
+            print(f"Forward: {forwardFitness:.2f}, Line: {followLineFitness:.2f}, AvoidCollision: {avoidCollisionFitness:.2f}, Spinning: {spinningFitness:.2f}, Negative: {negativefitness:.2f}")
+
         combinedFitness = (
             forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness + negativefitness
         )
