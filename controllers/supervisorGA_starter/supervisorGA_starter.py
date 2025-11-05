@@ -1,6 +1,6 @@
-from controller import Supervisor
-from controller import Keyboard
-from controller import Display
+from controller import Supervisor # type : ignore
+from controller import Keyboard # type : ignore
+from controller import Display # type : ignore
 
 import numpy, struct
 import ga, os
