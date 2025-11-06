@@ -91,8 +91,6 @@ class Controller:
         self.fitness = 0
 
         # Add line tracking
-        self.steps_on_line = 0
-        self.max_steps_on_line = 0
         self.steps_on_white = 0
         self.max_steps_on_white = 0
 
@@ -146,8 +144,6 @@ class Controller:
 
             # Reset fitness and line tracking when getting new genes
             self.fitness_values = []
-            self.steps_on_line = 0
-            self.max_steps_on_line = 0
             self.steps_on_white = 0
             self.max_steps_on_white = 0
 
@@ -180,22 +176,22 @@ class Controller:
             printing = True
 
         ### Define the fitness function to avoid collision
-        isColliding = False
+        isAvoiding = False
         avoidCollisionFitness = 0
         # Get front distance sensors values
         # If an obstacle is detected in front of the robot reduce fitness
-        obstacle_tolerance = 100
+        obstacle_tolerance = 900
         for ds in self.proximity_sensors:
             ds_value = ds.getValue()
             # Avoid sensor noise
-            if ds_value < MAX_DISTANCE_SENSOR_VALUE * 2:
+            if ds_value < MAX_DISTANCE_SENSOR_VALUE * 3:
+                if ds_value > MIN_DISTANCE_SENSOR_VALUE:
+                    isAvoiding = True
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE + obstacle_tolerance:
                     # Penalty for being too close to an obstacle
-                    too_close_penalty = ds_value / 200
+                    too_close_penalty = (ds_value - MIN_DISTANCE_SENSOR_VALUE) / MAX_DISTANCE_SENSOR_VALUE * 2
                     if avoidCollisionFitness < too_close_penalty:
                         avoidCollisionFitness = too_close_penalty
-                    # avoidCollisionFitness -= 3
-                    isColliding = True
 
         avoidCollisionFitness = -avoidCollisionFitness
 
@@ -205,7 +201,6 @@ class Controller:
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
         forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
-        forwardFitness *= 2
 
         ### Define the fitness function to encourage the robot to follow the line
         # get ground sensors values - 760 is white, 300 is black
@@ -214,37 +209,32 @@ class Controller:
         right = self.right_ir.getValue() < 700
 
         # Check if robot has lost the line
-        if not (left and centre and right) and not isColliding:
-            self.steps_on_line = 0
+        if not (left and centre and right) and not isAvoiding:
             self.steps_on_white += 1
             if self.steps_on_white > self.max_steps_on_white:
                 self.max_steps_on_white = self.steps_on_white
         else:
             self.steps_on_white = 0
-            self.steps_on_line += 1
-            if self.steps_on_line > self.max_steps_on_line:
-                self.max_steps_on_line = self.steps_on_line
 
         # Calculate line following fitness with permanent penalty AND progress tracking
         followLineFitness = 0
-        if not isColliding:
-            followLineFitness = (left + right + centre)  # Immediate reward
-            followLineFitness += min(self.max_steps_on_line / 100, 1)  # Progress reward
+        followLineFitness = (left + right + centre)  # Immediate reward
 
-            if followLineFitness <= 0:
-                followLineFitness -= 2
-
-        followLineFitness -= min((self.max_steps_on_white / 100) ** 2, 10)  # Penalty for time on white
+        # White penalty
+        if followLineFitness <= 0:
+            followLineFitness -= 2
+        followLineFitness -= min((self.max_steps_on_white / 100) ** 3, 10)  # Penalty for time on white
 
         ### Define the fitness function to avoid spinning behaviour
         spinningFitness = 0
         # Discourage negative correlation between wheel speeds
-        if left_speed < 0 or right_speed < 0:
-            spinningFitness = -1
-        # Discourage large differences between wheel speeds
-        speed_difference = abs(left_speed - right_speed)
-        if speed_difference > 0.01:
-            spinningFitness -= speed_difference
+        if not isAvoiding:
+            if left_speed < 0 or right_speed < 0:
+                spinningFitness = -1
+            # Discourage large differences between wheel speeds
+            speed_difference = abs(left_speed - right_speed)
+            if speed_difference > 0.01:
+                spinningFitness -= speed_difference
 
         ### Encourage exploration
         # print(self.left_motor.getPositionSensor().getValue())
@@ -254,13 +244,13 @@ class Controller:
             forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness
         )
 
-        if printing:
-            print("Forward: {:.3f}, Follow Line: {:.3f}, Avoid Collision: {:.3f}, Spinning: {:.3f}".format(
-                forwardFitness,
-                followLineFitness,
-                avoidCollisionFitness,
-                spinningFitness,
-            ))
+        # if printing:
+        #     print("Forward: {:.3f}, Follow Line: {:.3f}, Avoid Collision: {:.3f}, Spinning: {:.3f}".format(
+        #         forwardFitness,
+        #         followLineFitness,
+        #         avoidCollisionFitness,
+        #         spinningFitness,
+        #     ))
 
         self.fitness_values.append(combinedFitness)
         self.fitness = np.mean(self.fitness_values)
