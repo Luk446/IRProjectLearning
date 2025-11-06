@@ -236,6 +236,20 @@ class Controller:
             if speed_difference > 0.01:
                 spinningFitness -= speed_difference
 
+        # def is isavoiding
+        if isAvoiding:
+            # some func
+            
+
+        # define the back LR sensors
+        backleft = self.proximity_sensors[3].getValue()
+        backright = self.proximity_sensors[4].getValue()
+        # punish harsh when obstacle detected in rear sensors
+        if (backleft or backright) > (MIN_DISTANCE_SENSOR_VALUE + 20):
+            forwardFitness -= 4
+            
+
+                
         ### Encourage exploration
         # print(self.left_motor.getPositionSensor().getValue())
 
