@@ -105,7 +105,7 @@ class SupervisorGA:
                 break
             iterations = iterations + 1
 
-    def evaluate_genotype(self, genotype, generation):
+    def evaluate_genotype(self, genotype, generation, population):
         # Send genotype to robot for evaluation
         self.emitterData = str(genotype)
 
@@ -119,7 +119,7 @@ class SupervisorGA:
 
         # Measure fitness
         fitness = self.receivedFitness
-        print("Fitness: {}".format(fitness))
+        print("{}.Fitness: {}".format(population, fitness))
         current = (generation, genotype, fitness)
         self.genotypes.append(current)
 
@@ -156,7 +156,7 @@ class SupervisorGA:
             for population in range(self.num_population):
                 genotype = self.population[population]
                 # Evaluate
-                fitness = self.evaluate_genotype(genotype, generation)
+                fitness = self.evaluate_genotype(genotype, generation, population)
                 # print(fitness)
                 # Save its fitness value
                 current_population.append((genotype, float(fitness)))
