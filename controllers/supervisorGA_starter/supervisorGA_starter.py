@@ -6,9 +6,17 @@ import numpy, struct
 import ga, os
 import sys
 
-from ga_parameters import NUM_GENERATIONS, POPULATION_SIZE, NUM_ELITE, INITIAL_ROT, INITIAL_TRANS
+import pandas as pd
 
+from ga_parameters import (
+    NUM_GENERATIONS,
+    POPULATION_SIZE,
+    NUM_ELITE,
+    INITIAL_ROT,
+    INITIAL_TRANS,
+)
 
+import time
 class SupervisorGA:
     def __init__(self):
         # Simulation Parameters
@@ -61,6 +69,8 @@ class SupervisorGA:
         self.display.drawText("Fitness (Best - Red)", 0, 0)
         self.display.drawText("Fitness (Average - Green)", 0, 10)
 
+        self.data_filename = ""
+
     def createRandomPopulation(self):
         # Wait until the supervisor receives the size of the genotypes (number of weights)
         if self.num_weights > 0:
@@ -84,6 +94,11 @@ class SupervisorGA:
                 self.receivedFitness = float(
                     self.receivedData[9 : len(self.receivedData)]
                 )
+            elif typeMessage == "current":
+                self.receivedCurrentFitness = float(
+                    self.receivedData[9 : len(self.receivedData)]
+                )
+                # print("Received Fitness:", self.receivedFitness)
             self.receiver.nextPacket()
 
     def handle_emitter(self):
@@ -96,6 +111,7 @@ class SupervisorGA:
 
     def run_seconds(self, seconds):
         # print("Run Simulation")
+        robot_state_list = []
         stop = int((seconds * 1000) / self.time_step)
         iterations = 0
         while self.supervisor.step(self.time_step) != -1:
@@ -104,6 +120,18 @@ class SupervisorGA:
             if stop == iterations:
                 break
             iterations = iterations + 1
+            # save robot position with its current fitness
+            robot_pos = self.robot_node.getPosition()
+            robot_orientation = self.robot_node.getOrientation()
+            robot_state = {
+                "fitness": round(self.receivedCurrentFitness, 2),
+                "x": round(robot_pos[0], 2),
+                "y": round(robot_pos[1], 2),
+                "ox": round(robot_orientation[0], 2),
+                "oy": round(robot_orientation[1], 2),
+            }
+            robot_state_list.append(robot_state)
+        return robot_state_list
 
     def evaluate_genotype(self, genotype, generation, population):
         # Send genotype to robot for evaluation
@@ -115,7 +143,23 @@ class SupervisorGA:
         self.robot_node.resetPhysics()
 
         # Evaluation genotype
-        self.run_seconds(self.time_experiment)
+        robot_state_list = self.run_seconds(self.time_experiment)
+        for state in robot_state_list:
+            state["generation"] = generation
+            state["population"] = population
+
+        df = pd.DataFrame(robot_state_list)
+        df.to_csv(self.data_filename, mode="a", index=False, header=not os.path.exists(self.data_filename)) 
+        # Store genome data
+        df_genome = pd.DataFrame(
+            {
+                "generation": [generation],
+                "population": [population],
+                "genotype": [genotype.tolist()],
+            }
+        )
+        genome_filename = self.data_filename.replace("robot_position", "genome_data")
+        df_genome.to_csv(genome_filename, mode="a", index=False, header=not os.path.exists(genome_filename))
 
         # Measure fitness
         fitness = self.receivedFitness
@@ -147,10 +191,12 @@ class SupervisorGA:
             self.createRandomPopulation()
 
         print("starting GA optimization ...\n")
+        # Time for filename
+        self.data_filename = "data/robot_position_{}.csv".format(time.strftime("%Y%m%d-%H%M%S"))
 
         # For each Generation
         for generation in range(self.num_generations):
-            print("Generation: {}".format(generation))
+            print("\nGENERATION: {}".format(generation))
             current_population = []
             # Select each Genotype or Individual
             for population in range(self.num_population):
@@ -213,9 +259,13 @@ if __name__ == "__main__":
     print("(R|r)un Best Individual or (S|s)earch for New Best Individual:")
     while gaModel.supervisor.step(gaModel.time_step) != -1:
         resp = keyboard.getKey()
-        if resp == 83 or resp == 65619: # S or s key
+        if resp == 83 or resp == 65619:  # S or s key
             gaModel.run_optimization()
-            print("Optimization: (R|r)un Best Individual or (S|s)earch for New Best Individual:")
-        elif resp == 82 or resp == 65619: # R or r key
+            print(
+                "Optimization: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
+            )
+        elif resp == 82 or resp == 65619:  # R or r key
             gaModel.run_demo()
-            print("Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:")
+            print(
+                "Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
+            )

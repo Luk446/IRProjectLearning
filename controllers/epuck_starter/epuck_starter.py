@@ -1,17 +1,22 @@
-from controller import Robot, Motor, DistanceSensor
+from controller import Robot, Motor, DistanceSensor, Camera
 import numpy as np
 import mlp as ntw
 from typing import List
 
-HIDDEN_LAYERS = [12]
+HIDDEN_LAYERS = [12, 4]
 MIN_GROUND_SENSOR_VALUE = 280
 MAX_GROUND_SENSOR_VALUE = 760
 MIN_DISTANCE_SENSOR_VALUE = 80
 MAX_DISTANCE_SENSOR_VALUE = 1000
 PRINT_EVERY = 1000  # Print every n steps
 
-EPSILON = 0.25  # Small value to determine if the robot is spinning
+EPSILON = 0.6  # Small value to determine if the robot is spinning
 
+STEPS_ON_LINE_TOLERANCE = 150
+
+MINIMUM_SPEED = 1.0
+
+CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
 
 class Controller:
     def __init__(self, robot: Robot):
@@ -27,7 +32,7 @@ class Controller:
         ### The number of neurons should be in between of 1 to 20.
         ### Number of hidden layers should be one or two.
         self.number_input_layer = (
-            13  # 8 proximity + 3 ground sensors + 2 previous motor speeds
+            12  # 8 proximity + 3 ground sensors + 1 camera detecting obstacle
         )
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
@@ -89,6 +94,9 @@ class Controller:
         self.right_ir: DistanceSensor = self.robot.getDevice("gs2")
         self.right_ir.enable(self.time_step)
 
+        self.camera: Camera = self.robot.getDevice("camera")
+        self.camera.enable(self.time_step)
+
         # Enable Emitter and Receiver (to communicate with the Supervisor)
         self.emitter = self.robot.getDevice("emitter")
         self.receiver = self.robot.getDevice("receiver")
@@ -100,14 +108,22 @@ class Controller:
         # Fitness value (initialization fitness parameters once)
         self.fitness_values = []
         self.fitness = 0
+        self.current_fitness = 0
 
         # Add line tracking
         self.steps_on_white = 0
         self.max_steps_on_white = 0
+        self.steps_on_line = 0
+        self.max_steps_on_line = 0
+        self.steps_on_line_tolerance = 0
+        self.has_lost_line = False
         self.steps_avoiding = 0
         self.last_velocities: List[tuple[float, float]] = []
 
         self.print_every = 0
+
+        self.camera_error = 0
+        self.check_camera_every = 0
 
     def check_for_new_genes(self):
         if self.flagMessage:
@@ -159,6 +175,10 @@ class Controller:
             self.fitness_values = []
             self.steps_on_white = 0
             self.max_steps_on_white = 0
+            self.steps_on_line = 0
+            self.max_steps_on_line = 0
+            self.steps_on_line_tolerance = 0
+            self.has_lost_line = False
 
             self.print_every = 0
 
@@ -205,11 +225,17 @@ class Controller:
                     too_close_penalty = (
                         ds_value - MIN_DISTANCE_SENSOR_VALUE
                     ) / MAX_DISTANCE_SENSOR_VALUE
-                    too_close_penalty /= 4
+                    too_close_penalty /= 2
                     if avoidCollisionFitness < too_close_penalty:
                         avoidCollisionFitness = too_close_penalty
 
         avoidCollisionFitness = -avoidCollisionFitness
+        
+        
+        if self.camera_error < 5:
+            isAvoiding = True
+            # print("camera_error too low:", self.camera_error)
+            avoidCollisionFitness -= 2
 
         ### Define the fitness function to increase the speed of the robot and
         ### to encourage the robot to move forward only
@@ -220,17 +246,19 @@ class Controller:
         v_change = 0
         if False:  # disable v_change penalty for now
             self.last_velocities.append((left_speed, right_speed))
-            if len(self.last_velocities) > 50:
+            if len(self.last_velocities) > 101:
                 self.last_velocities.pop(0)
                 v_change = sum(
                     abs(self.last_velocities[i][0] - self.last_velocities[i - 1][0])
                     + abs(self.last_velocities[i][1] - self.last_velocities[i - 1][1])
-                    for i in range(-49, 0)
+                    for i in range(-100, 0)
                 )
-                if v_change < 10:  # almost no change for 40 steps
-                    avoidCollisionFitness -= 2
+                if v_change < 100:  # almost no change for 40 steps
+                    avoidCollisionFitness -= 3
 
         forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
+        if forwardFitness < MINIMUM_SPEED / self.max_speed:
+            forwardFitness -= 3.0
         # forwardFitness *= 1.5
 
         ### Define the fitness function to encourage the robot to follow the line
@@ -241,11 +269,19 @@ class Controller:
 
         # Check if robot has lost the line
         if not (left and centre and right) and not isAvoiding:
+            self.steps_on_line_tolerance += 1
+            if self.steps_on_line_tolerance > STEPS_ON_LINE_TOLERANCE:
+                self.steps_on_line = 0
+                self.has_lost_line = True
             self.steps_on_white += 1
             if self.steps_on_white > self.max_steps_on_white:
                 self.max_steps_on_white = self.steps_on_white
         else:
             self.steps_on_white = 0
+            self.steps_on_line_tolerance = 0
+            self.steps_on_line += 1
+            if self.steps_on_line > self.max_steps_on_line:
+                self.max_steps_on_line = self.steps_on_line
 
         # Calculate line following fitness with permanent penalty AND progress tracking
         followLineFitness = 0
@@ -257,15 +293,13 @@ class Controller:
         # Discourage negative correlation between wheel speeds
         if isAvoiding:
             self.steps_avoiding += 1
-            # if abs(left_speed - right_speed) < EPSILON:
-            #     avoidCollisionFitness -= 3
-            if speed_difference > EPSILON * 3:
+            if speed_difference < EPSILON:
+                avoidCollisionFitness -= 1
+            if speed_difference > EPSILON * 2:
                 spinningFitness += 1
             # Encourage going on white to avoid the obstacle
-            if followLineFitness <= 0 and self.steps_avoiding < 300:
+            if followLineFitness <= 0:
                 followLineFitness += 2
-            else:
-                followLineFitness -= 1
         else:
             self.steps_avoiding = 0
             # White penalty
@@ -273,14 +307,14 @@ class Controller:
                 followLineFitness -= 2
 
             # Discourage large differences between wheel speeds
-            if speed_difference > EPSILON:
-                spinningFitness -= 1 + speed_difference
+            # if speed_difference > EPSILON:
+            #     spinningFitness -= 2 + speed_difference
 
-            if left_speed < 0 or right_speed < 0:
-                spinningFitness = -20
+        if left_speed < 0 or right_speed < 0:
+            spinningFitness = -5
 
-        if self.steps_avoiding > 1000:
-            followLineFitness -= 5
+        if self.steps_avoiding > 1500:
+            followLineFitness -= 3
 
         # followLineFitness -= min((self.max_steps_on_white / 120) ** 2, 10)  # Penalty for time on white
 
@@ -291,7 +325,11 @@ class Controller:
         # if backleft > MIN_DISTANCE_SENSOR_VALUE or backright > MIN_DISTANCE_SENSOR_VALUE:
         #     forwardFitness -= 1
 
-        ### Encourage exploration
+        ### Stay on line
+        # if not self.has_lost_line:
+        #     followLineFitness += 1 # self.max_steps_on_line / 1000
+        # else:
+        #     followLineFitness -= 2
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = (
@@ -300,16 +338,18 @@ class Controller:
 
         self.fitness_values.append(combinedFitness)
         self.fitness = np.mean(self.fitness_values)
+        self.current_fitness = combinedFitness
 
         if printing:
             print(
-                "Fitness: {:.1f}, Forward: {:.1f}, Follow Line: {:.1f}, Avoid Collision: {:.1f}, Spinning: {:.1f}, MaxWhite: {}, Avoid: {}, v_change: {:.1f}".format(
+                "Fitness: {:.1f}, Forward: {:.1f}, Follow Line: {:.1f}, Avoid Collision: {:.1f}, Spinning: {:.1f}, MaxLine: {}-{}, Avoid: {}, v_change: {:.1f}".format(
                     self.fitness,
                     forwardFitness,
                     followLineFitness,
                     avoidCollisionFitness,
                     spinningFitness,
-                    self.max_steps_on_white,
+                    self.max_steps_on_line,
+                    'X' if self.has_lost_line else 'O',
                     self.steps_avoiding,
                     v_change,
                 )
@@ -330,6 +370,14 @@ class Controller:
         string_message = str(data)
         string_message = string_message.encode("utf-8")
         # print("Robot send fitness:", string_message)
+        self.emitter.send(string_message)
+
+        # Send the self.current_fitness value to the supervisor
+        data = str(self.current_fitness)
+        data = "current: " + data
+        string_message = str(data)
+        string_message = string_message.encode("utf-8")
+        # print("Robot send current_fitness:", string_message)
         self.emitter.send(string_message)
 
     def handle_receiver(self):
@@ -428,8 +476,18 @@ class Controller:
                     self.inputs.append(max(0, (temp - min_ds) / (max_ds - min_ds)))
                     # print("Distance Sensors - Index: {}  Value: {}".format(i,self.proximity_sensors[i].getValue()))
 
-            self.inputs.append(self.clip_value(self.velocity_left, 1))
-            self.inputs.append(self.clip_value(self.velocity_right, 1))
+            # self.inputs.append(self.clip_value(self.velocity_left, 1))
+            # self.inputs.append(self.clip_value(self.velocity_right, 1))
+
+            # Read Camera and compute error
+            self.check_camera_every += 1
+            if self.check_camera_every >= CHECK_CAMERA_EVERY:
+                self.check_camera_every = 0
+                img = np.array(self.camera.getImageArray(), dtype=np.uint8)  # shape (h, w, 3)
+                mean_color = img.mean(axis=(0, 1))
+                diff = np.abs(img - mean_color)
+                self.camera_error = np.mean(diff)
+            self.inputs.append(1 if self.camera_error < 5 else 0)
 
             # GA Iteration
             # Verify if there is a new genotype to be used that was sent from Supervisor
