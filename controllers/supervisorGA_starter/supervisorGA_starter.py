@@ -6,6 +6,9 @@ import numpy, struct
 import ga, os
 import sys
 
+import json
+import gc
+
 import pandas as pd
 
 from ga_parameters import (
@@ -14,6 +17,9 @@ from ga_parameters import (
     NUM_ELITE,
     INITIAL_ROT,
     INITIAL_TRANS,
+    CROSSOVER_RATE,
+    TOURNAMENT_K,
+    MUTATION_RATE
 )
 
 import time
@@ -149,23 +155,31 @@ class SupervisorGA:
             state["population"] = population
 
         df = pd.DataFrame(robot_state_list)
-        df.to_csv(self.data_filename, mode="a", index=False, header=not os.path.exists(self.data_filename)) 
+        df.to_csv(self.data_filename, mode="a", index=False, header=not os.path.exists(self.data_filename))
+
+        # Measure fitness
+        fitness = self.receivedFitness
+        print("{}.Fitness: {}".format(population, fitness))
+        # current = (generation, genotype, fitness)
+        # self.genotypes.append(current)
+
         # Store genome data
         df_genome = pd.DataFrame(
             {
                 "generation": [generation],
                 "population": [population],
+                "fitness": [fitness],
                 "genotype": [genotype.tolist()],
             }
         )
+
         genome_filename = self.data_filename.replace("robot_position", "genome_data")
         df_genome.to_csv(genome_filename, mode="a", index=False, header=not os.path.exists(genome_filename))
 
-        # Measure fitness
-        fitness = self.receivedFitness
-        print("{}.Fitness: {}".format(population, fitness))
-        current = (generation, genotype, fitness)
-        self.genotypes.append(current)
+        del robot_state_list
+        del df
+        del df_genome
+        gc.collect()
 
         return fitness
 
@@ -193,6 +207,17 @@ class SupervisorGA:
         print("starting GA optimization ...\n")
         # Time for filename
         self.data_filename = "data/robot_position_{}.csv".format(time.strftime("%Y%m%d-%H%M%S"))
+        # store GA hyperparameters
+        hyperparameters = {
+            "num_generations": self.num_generations,
+            "population_size": self.num_population,
+            "num_elite": self.num_elite,
+            "crossover_rate": CROSSOVER_RATE,
+            "tournament_k": TOURNAMENT_K,
+            "mutation_rate": MUTATION_RATE,
+        }
+        with open(self.data_filename.replace("robot_position", "ga_parameters").replace(".csv", ".json"), "w") as f:
+            json.dump(hyperparameters, f, indent=4)
 
         # For each Generation
         for generation in range(self.num_generations):
@@ -220,8 +245,7 @@ class SupervisorGA:
                     current_population, self.num_elite
                 )
 
-        # print("All Genotypes: {}".format(self.genotypes))
-        print("GA optimization terminated.\n")
+        print(f"GA optimization terminated, saved data to {self.data_filename}\n")
 
     def draw_scaled_line(self, generation, y1, y2):
         # Define the scale of the fitness plot
