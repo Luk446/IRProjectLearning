@@ -2,7 +2,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, CheckButtons, Button
 import numpy as np
-from line_profiler import profile
 import colorsys
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation
@@ -199,8 +198,6 @@ def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     if anim_max_frames == 0:
         anim_max_frames = 1
 
-
-@profile
 def update(val):
     """
     Original update used for static view. Also rebuilds animation data when generation
