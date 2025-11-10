@@ -10,13 +10,25 @@ MIN_DISTANCE_SENSOR_VALUE = 80
 MAX_DISTANCE_SENSOR_VALUE = 1000
 PRINT_EVERY = 1000  # Print every n steps
 
+CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
+
+# --- BEHAVIOR ---
+OBSTACLE_TOLERANCE = 1000 # 400
+CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
+MINIMUM_SPEED = 1.0
+STEPS_ON_LINE_TOLERANCE = 150
 EPSILON = 0.6  # Small value to determine if the robot is spinning
 
-STEPS_ON_LINE_TOLERANCE = 150
+# --- FITNESSES ---
 
-MINIMUM_SPEED = 1.0
+# Encourage not being around obstacles for too long, avoid border stuck
+AVOID_BEING_STUCK_AROUND_OBSTACLE = -4
 
-CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
+# Try to avoid going backward and doing a U-turn
+AVOID_BACKWARD_WHEELS = -2
+CAMERA_DETECTS_OBSTACLE = -2
+AVOID_SLOW_ROBOT = -3
+REWARD_FOLLOWING_LINE = 2
 
 class Controller:
     def __init__(self, robot: Robot):
@@ -213,14 +225,13 @@ class Controller:
         avoidCollisionFitness = 0
         # Get front distance sensors values
         # If an obstacle is detected in front of the robot reduce fitness
-        obstacle_tolerance = 400
         for ds in self.proximity_sensors:
             ds_value = ds.getValue()
             # Avoid sensor noise
             if ds_value < MAX_DISTANCE_SENSOR_VALUE * 3:
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE:
                     isAvoiding = True
-                if ds_value > MIN_DISTANCE_SENSOR_VALUE + obstacle_tolerance:
+                if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE:
                     # Penalty for being too close to an obstacle
                     too_close_penalty = (
                         ds_value - MIN_DISTANCE_SENSOR_VALUE
@@ -230,12 +241,11 @@ class Controller:
                         avoidCollisionFitness = too_close_penalty
 
         avoidCollisionFitness = -avoidCollisionFitness
-        
-        
-        if self.camera_error < 5:
+
+        if self.camera_error < CAMERA_DETECTS_OBSTACLE_PERCENTAGE:
             isAvoiding = True
             # print("camera_error too low:", self.camera_error)
-            avoidCollisionFitness -= 2
+            avoidCollisionFitness += CAMERA_DETECTS_OBSTACLE
 
         ### Define the fitness function to increase the speed of the robot and
         ### to encourage the robot to move forward only
@@ -244,21 +254,21 @@ class Controller:
         right_speed = self.right_motor.getVelocity()
         #todo Not sure about that v_change part, maybe a proper "has_line" variable should fit better (going to false when on white or colliding for too long)
         v_change = 0
-        if False:  # disable v_change penalty for now
+        if True:  # disable v_change penalty for now
             self.last_velocities.append((left_speed, right_speed))
-            if len(self.last_velocities) > 101:
+            if len(self.last_velocities) > 11:
                 self.last_velocities.pop(0)
                 v_change = sum(
                     abs(self.last_velocities[i][0] - self.last_velocities[i - 1][0])
                     + abs(self.last_velocities[i][1] - self.last_velocities[i - 1][1])
-                    for i in range(-100, 0)
+                    for i in range(-10, 0)
                 )
-                if v_change < 100:  # almost no change for 40 steps
+                if v_change < 10:  # almost no change for 10 steps
                     avoidCollisionFitness -= 3
 
         forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
         if forwardFitness < MINIMUM_SPEED / self.max_speed:
-            forwardFitness -= 3.0
+            forwardFitness += AVOID_SLOW_ROBOT
         # forwardFitness *= 1.5
 
         ### Define the fitness function to encourage the robot to follow the line
@@ -299,22 +309,22 @@ class Controller:
                 spinningFitness += 1
             # Encourage going on white to avoid the obstacle
             if followLineFitness <= 0:
-                followLineFitness += 2
+                followLineFitness += 1
         else:
             self.steps_avoiding = 0
             # White penalty
             if followLineFitness <= 1:
-                followLineFitness -= 2
+                followLineFitness -= 5
 
             # Discourage large differences between wheel speeds
             # if speed_difference > EPSILON:
             #     spinningFitness -= 2 + speed_difference
 
         if left_speed < 0 or right_speed < 0:
-            spinningFitness = -5
+            spinningFitness = AVOID_BACKWARD_WHEELS
 
         if self.steps_avoiding > 1500:
-            followLineFitness -= 3
+            followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
 
         # followLineFitness -= min((self.max_steps_on_white / 120) ** 2, 10)  # Penalty for time on white
 
@@ -326,8 +336,8 @@ class Controller:
         #     forwardFitness -= 1
 
         ### Stay on line
-        # if not self.has_lost_line:
-        #     followLineFitness += 1 # self.max_steps_on_line / 1000
+        if not self.has_lost_line:
+            followLineFitness += REWARD_FOLLOWING_LINE # self.max_steps_on_line / 1000
         # else:
         #     followLineFitness -= 2
 

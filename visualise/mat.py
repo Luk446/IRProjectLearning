@@ -2,23 +2,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, CheckButtons, Button
 import numpy as np
-import colorsys
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation
-
-
-def brighten_color(color, factor=0.3):
-    r, g, b, a = color
-    h, light, s = colorsys.rgb_to_hls(r, g, b)
-    light = min(1, light + factor * (1 - light))  # smoothly increase lightness
-    r, g, b = colorsys.hls_to_rgb(h, light, s)
-    return (r, g, b, a)
-
+from mat_utils import brighten_color, get_latest_robot_position_file
 
 # --- Initial parameters ---
+directory = "../controllers/supervisorGA_starter/data/"
 # filename = "robot_position_20251109-030429"
-filename = "robot_position_20251110-094113"
-csv_file = f"../controllers/supervisorGA_starter/data/{filename}.csv"
+# filename = "robot_position_20251110-131412"
+filename = get_latest_robot_position_file(directory)
+print(filename)
+csv_file = f"{directory}{filename}"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
 gen_min, gen_max = df_info["generation"].min(), df_info["generation"].max()
 print(f"Generations: {gen_min} to {gen_max}")
