@@ -77,13 +77,16 @@ class SupervisorGA:
 
         self.data_filename = ""
 
-    def createRandomPopulation(self):
+    def createRandomPopulation(self, genotype=None):
         # Wait until the supervisor receives the size of the genotypes (number of weights)
         if self.num_weights > 0:
             # Define the size of the population
             pop_size = (self.num_population, self.num_weights)
             # Create the initial population with random weights
             self.population = numpy.random.uniform(low=-1.0, high=1.0, size=pop_size)
+        if genotype is not None:
+            self.population[0] = genotype
+            self.population[1] = genotype
 
     def handle_receiver(self):
         while self.receiver.getQueueLength() > 0:
@@ -194,6 +197,9 @@ class SupervisorGA:
         self.trans_field.setSFVec3f(INITIAL_TRANS)
         self.rot_field.setSFRotation(INITIAL_ROT)
         self.robot_node.resetPhysics()
+        while self.num_weights == 0:
+            self.handle_receiver()
+            self.createRandomPopulation(genotype)
 
         # Evaluation genotype
         self.run_seconds(self.time_experiment)

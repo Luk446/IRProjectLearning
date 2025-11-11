@@ -5,12 +5,14 @@ import numpy as np
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation
 from mat_utils import brighten_color, get_latest_robot_position_file
+import sys
 
 # --- Initial parameters ---
 directory = "../controllers/supervisorGA_starter/data/"
-# filename = "robot_position_20251109-030429"
-# filename = "robot_position_20251110-131412"
-filename = get_latest_robot_position_file(directory)
+if len(sys.argv) > 1:
+    filename = sys.argv[1]
+else:
+    filename = get_latest_robot_position_file(directory)
 print(filename)
 csv_file = f"{directory}{filename}"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
