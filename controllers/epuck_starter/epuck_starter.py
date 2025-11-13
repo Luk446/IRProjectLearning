@@ -245,12 +245,9 @@ class Controller:
                     is_avoiding = True
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE:
                     # Penalty for being too close to an obstacle
-                    too_close_penalty = (
-                        ds_value - MIN_DISTANCE_SENSOR_VALUE
-                    ) / MAX_DISTANCE_SENSOR_VALUE
-                    too_close_penalty /= 2
-                    if fitness < too_close_penalty:
-                        fitness = -1
+                    fitness = -0.3
+                
+
         # accel = self.accelerometer.getValues()
         # if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
         #     is_avoiding = True
@@ -282,6 +279,7 @@ class Controller:
         followLineFitness = 0
         if not is_avoiding:
             followLineFitness = left
+
 
         is_on_line = False
         # if left or is_avoiding:
