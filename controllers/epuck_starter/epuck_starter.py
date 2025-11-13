@@ -51,7 +51,7 @@ class Controller:
         ### Add the number of neurons for each layer.
         ### The number of neurons should be in between of 1 to 20.
         ### Number of hidden layers should be one or two.
-        self.number_input_layer = 11  # 6 proximity + 3 ground sensors + 1 is robot stopped + 2 accelerometer + 1 camera detecting obstacle + 2 gyro
+        self.number_input_layer = 6  # 3 proximity + 3 ground sensors
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
         self.number_hidden_layer = HIDDEN_LAYERS
@@ -324,7 +324,7 @@ class Controller:
         # if is_avoiding:
         #     self.steps_avoiding += 1
         #     # Encourage going on white to avoid the obstacle
-        #     if followLineFitness <= 0:
+        #     if followLineFitness <= 0:``
         #         followLineFitness += 1
         #     if speed_difference > EPSILON:
         #         spinningFitness += 0.5
@@ -490,12 +490,12 @@ class Controller:
             for i in range(8):
                 ### Select the distance sensors that you will use
                 if (
-                    i == 0
-                    or i == 1
-                    or i == 2
-                    or i == 3
-                    or i == 4
-                    or i == 5
+                    # i == 0
+                    # or i == 1
+                    # or i == 2
+                    # or i == 3
+                    # or i == 4
+                    i == 5
                     or i == 6
                     or i == 7
                 ):
