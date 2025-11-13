@@ -13,25 +13,26 @@ PRINT_EVERY = 1000  # Print every n steps
 CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
 
 # --- BEHAVIOR ---
-OBSTACLE_TOLERANCE = 1000  # 400
+OBSTACLE_TOLERANCE = 300  # 400
 CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
-MINIMUM_SPEED = 1.0
+MINIMUM_SPEED = 0.5
 STEPS_ON_LINE_TOLERANCE = 130
 EPSILON = 0.4  # Small value to determine if the robot is spinning
+MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 1.0
+W_FORWARD = 0.3
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
 W_SPINNING = 1.0
 
 # Encourage not being around obstacles for too long, avoid border stuck
-AVOID_BEING_STUCK_AROUND_OBSTACLE = -10
+AVOID_BEING_STUCK_AROUND_OBSTACLE = -2
 
 # Try to avoid going backward and doing a U-turn
-AVOID_BACKWARD_WHEELS = -2
-CAMERA_DETECTS_OBSTACLE = -2
+AVOID_BACKWARD_WHEELS = -1
+CAMERA_DETECTS_OBSTACLE = -1
 AVOID_NO_ACCELERATION = -1
 AVOID_SLOW_ROBOT = -1  # Slow robot don't even see the obstacle
 REWARD_FOLLOWING_LINE = 0.5
@@ -50,7 +51,7 @@ class Controller:
         ### Add the number of neurons for each layer.
         ### The number of neurons should be in between of 1 to 20.
         ### Number of hidden layers should be one or two.
-        self.number_input_layer = 11  # 8 proximity + 3 ground sensors + 1 is robot stopped + 2 accelerometer + 1 camera detecting obstacle + 2 gyro
+        self.number_input_layer = 11  # 6 proximity + 3 ground sensors + 1 is robot stopped + 2 accelerometer + 1 camera detecting obstacle + 2 gyro
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
         self.number_hidden_layer = HIDDEN_LAYERS
@@ -114,8 +115,8 @@ class Controller:
         # self.camera: Camera = self.robot.getDevice("camera")
         # self.camera.enable(self.time_step)
 
-        self.accelerometer: Accelerometer = self.robot.getDevice("accelerometer")
-        self.accelerometer.enable(self.time_step)
+        # self.accelerometer: Accelerometer = self.robot.getDevice("accelerometer")
+        # self.accelerometer.enable(self.time_step)
 
         # self.gyro: Gyro = self.robot.getDevice("gyro")
         # self.gyro.enable(self.time_step)
@@ -247,18 +248,27 @@ class Controller:
                     too_close_penalty = (
                         ds_value - MIN_DISTANCE_SENSOR_VALUE
                     ) / MAX_DISTANCE_SENSOR_VALUE
-                    too_close_penalty /= 4
+                    too_close_penalty /= 2
                     if fitness < too_close_penalty:
-                        fitness = -too_close_penalty
-        accel = self.accelerometer.getValues()
-        if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
-            is_avoiding = True
-            fitness += AVOID_NO_ACCELERATION
+                        fitness = -1
+        # accel = self.accelerometer.getValues()
+        # if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
+        #     is_avoiding = True
+        #     fitness += AVOID_NO_ACCELERATION
+
+        # Read Camera and compute error
+        # self.check_camera_every += 1
+        # if self.check_camera_every >= CHECK_CAMERA_EVERY:
+        #     self.check_camera_every = 0
+        #     img = np.array(self.camera.getImageArray(), dtype=np.uint8)  # shape (h, w, 3)
+        #     mean_color = img.mean(axis=(0, 1))
+        #     diff = np.abs(img - mean_color)
+        #     self.camera_error = np.mean(diff)
 
         # if self.camera_error < CAMERA_DETECTS_OBSTACLE_PERCENTAGE:
-        #     isAvoiding = True
+        #     is_avoiding = True
         #     # print("camera_error too low:", self.camera_error)
-        #     avoidCollisionFitness += CAMERA_DETECTS_OBSTACLE
+        #     fitness += CAMERA_DETECTS_OBSTACLE
 
         return fitness, is_avoiding
 
@@ -268,15 +278,25 @@ class Controller:
         centre = self.center_ir.getValue() < 700
         right = self.right_ir.getValue() < 700
 
-        followLineFitness = right
-        followLineFitness -= left
+        # is_on_white = not (left or centre or right)
+        followLineFitness = 0
+        if not is_avoiding:
+            followLineFitness = left
 
         is_on_line = False
-        if (left and centre and right) or is_avoiding:
-            is_on_line = True
+        # if left or is_avoiding:
+        #     is_on_line = True
 
-        if self.steps_avoiding > 3000:
-            followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
+        # if is_on_white:
+        #     if is_avoiding:
+        #         followLineFitness += 0.1
+        #     else:
+        #         followLineFitness -= REWARD_FOLLOWING_LINE
+
+        # if self.steps_avoiding > 3000:
+        #     followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
+
+        followLineFitness -= right
 
         # Check if robot has lost the line
         # if not (left and centre and right) and not isAvoiding:
@@ -303,20 +323,22 @@ class Controller:
         speed_difference = abs(left_speed - right_speed)
 
         # Discourage negative correlation between wheel speeds
-        if is_avoiding:
-            self.steps_avoiding += 1
-            # Encourage going on white to avoid the obstacle
-            # if followLineFitness <= 0:
-            #     followLineFitness += 1
-        else:
-            self.steps_avoiding = 0
-            # White penalty
-            # if followLineFitness <= 1:
-            #     followLineFitness -= 3
+        # if is_avoiding:
+        #     self.steps_avoiding += 1
+        #     # Encourage going on white to avoid the obstacle
+        #     if followLineFitness <= 0:
+        #         followLineFitness += 1
+        #     if speed_difference > EPSILON:
+        #         spinningFitness += 0.5
+        # else:
+        #     self.steps_avoiding = 0
+        #     # White penalty
+        #     # if followLineFitness <= 1:
+        #     #     followLineFitness -= 3
 
-            # Discourage large differences between wheel speeds
-            if speed_difference > EPSILON:
-                spinningFitness -= 2 + speed_difference
+        #     # Discourage large differences between wheel speeds
+        #     if speed_difference > EPSILON:
+        #         spinningFitness -= 2 + speed_difference
 
         if left_speed < 0 or right_speed < 0:
             spinningFitness = AVOID_BACKWARD_WHEELS
@@ -324,14 +346,14 @@ class Controller:
         return spinningFitness
 
     def encourage_speed(self, is_on_line):
-        if not is_on_line:
-            return 0
+        # if not is_on_line:
+        #     return 0
         forwardFitness = 0
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
 
-        forwardFitness = (left_speed + right_speed) / (2 * self.max_speed)
-        if forwardFitness < MINIMUM_SPEED / self.max_speed:
+        forwardFitness = (left_speed + right_speed) / (2 * MAX_MOTOR_SPEED)
+        if forwardFitness < MINIMUM_SPEED / MAX_MOTOR_SPEED:
             forwardFitness += AVOID_SLOW_ROBOT
         return forwardFitness
 
@@ -342,12 +364,17 @@ class Controller:
         spinningFitness = self.avoid_spinning(is_avoiding, followLineFitness)
         forwardFitness = self.encourage_speed(is_on_line)
 
+        forwardFitness *= W_FORWARD
+        followLineFitness *= W_FOLLOW_LINE
+        avoidCollisionFitness *= W_COLLISION
+        spinningFitness *= W_SPINNING
+
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = (
-            W_FORWARD * forwardFitness
-            + W_FOLLOW_LINE * followLineFitness
-            + W_COLLISION * avoidCollisionFitness
-            + W_SPINNING * spinningFitness
+            forwardFitness
+            + followLineFitness
+            + avoidCollisionFitness
+            + spinningFitness
         )
 
         self.fitness_values.append(combinedFitness)
@@ -492,14 +519,6 @@ class Controller:
             # self.inputs.append(self.clip_value(self.velocity_left, 1))
             # self.inputs.append(self.clip_value(self.velocity_right, 1))
 
-            # Read Camera and compute error
-            # self.check_camera_every += 1
-            # if self.check_camera_every >= CHECK_CAMERA_EVERY:
-            #     self.check_camera_every = 0
-            #     img = np.array(self.camera.getImageArray(), dtype=np.uint8)  # shape (h, w, 3)
-            #     mean_color = img.mean(axis=(0, 1))
-            #     diff = np.abs(img - mean_color)
-            #     self.camera_error = np.mean(diff)
             # self.inputs.append(self.camera_error / 5 if self.camera_error < 5 else 0)
             # accel = self.accelerometer.getValues()
             # is_robot_stopped = (
