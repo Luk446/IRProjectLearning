@@ -26,7 +26,7 @@ is_selecting_bests = False
 selected_pops = populations_all  # default = all
 select_top_count = 5
 MARKER_SIZE = 30  # increased for single-point-per-pop animation
-MARKER_OPACITY = 0.9
+MARKER_OPACITY = 0.2
 SELECT_REAL_TOP = True
 
 # --- Load first generation ---

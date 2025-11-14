@@ -1,9 +1,9 @@
-from controller import Robot, Motor, DistanceSensor, Camera, Accelerometer, Gyro
+from controller import Robot, Motor, DistanceSensor
 import numpy as np
 import mlp as ntw
 from typing import List
 
-HIDDEN_LAYERS = [16, 4]
+HIDDEN_LAYERS = [16]
 MIN_GROUND_SENSOR_VALUE = 280
 MAX_GROUND_SENSOR_VALUE = 760
 MIN_DISTANCE_SENSOR_VALUE = 80
@@ -13,16 +13,16 @@ PRINT_EVERY = 1000  # Print every n steps
 CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
 
 # --- BEHAVIOR ---
-OBSTACLE_TOLERANCE = 300  # 400
+OBSTACLE_TOLERANCE = 120  # 400
 CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
 MINIMUM_SPEED = 0.5
 STEPS_ON_LINE_TOLERANCE = 130
-EPSILON = 0.4  # Small value to determine if the robot is spinning
+EPSILON = 0.3  # Small value to determine if the robot is spinning
 MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 0.3
+W_FORWARD = 0.4
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
 W_SPINNING = 1.0
@@ -245,8 +245,7 @@ class Controller:
                     is_avoiding = True
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE:
                     # Penalty for being too close to an obstacle
-                    fitness = -0.3
-                
+                    fitness = -0.2
 
         # accel = self.accelerometer.getValues()
         # if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
@@ -276,9 +275,9 @@ class Controller:
         right = self.right_ir.getValue() < 700
 
         # is_on_white = not (left or centre or right)
-        followLineFitness = 0
-        if not is_avoiding:
-            followLineFitness = left
+        followLineFitness = left
+        if is_avoiding:
+            followLineFitness /= 3
 
 
         is_on_line = False
@@ -318,28 +317,36 @@ class Controller:
         spinningFitness = 0
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
-        speed_difference = abs(left_speed - right_speed)
+        speed_sum = abs(left_speed) + abs(right_speed)
+        if speed_sum == 0:
+            speed_difference = 0
+        else:
+            speed_difference = abs(left_speed - right_speed) / speed_sum
+
+        # print(f"Left speed: {left_speed}, Right speed: {right_speed}, Speed difference: {speed_difference}")
 
         # Discourage negative correlation between wheel speeds
-        # if is_avoiding:
+        if is_avoiding:
         #     self.steps_avoiding += 1
         #     # Encourage going on white to avoid the obstacle
         #     if followLineFitness <= 0:``
         #         followLineFitness += 1
-        #     if speed_difference > EPSILON:
-        #         spinningFitness += 0.5
-        # else:
+            if left_speed > right_speed and followLineFitness > 1:
+                spinningFitness += 1
+                if speed_difference > EPSILON:
+                    spinningFitness += 2
+        else:
         #     self.steps_avoiding = 0
         #     # White penalty
         #     # if followLineFitness <= 1:
         #     #     followLineFitness -= 3
 
         #     # Discourage large differences between wheel speeds
-        #     if speed_difference > EPSILON:
-        #         spinningFitness -= 2 + speed_difference
+            if speed_difference > EPSILON:
+                spinningFitness -= 1
 
         if left_speed < 0 or right_speed < 0:
-            spinningFitness = AVOID_BACKWARD_WHEELS
+            spinningFitness += AVOID_BACKWARD_WHEELS
 
         return spinningFitness
 
