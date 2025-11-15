@@ -13,9 +13,13 @@ if len(sys.argv) > 1:
     filename = sys.argv[1]
 else:
     filename = get_latest_robot_position_file(directory)
-print(filename)
 csv_file = f"{directory}{filename}"
+gen_filename = filename.replace("robot_positions_", "generation_data_")
+gen_csv_file = f"{directory}{gen_filename}"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
+df_gen_info = pd.read_csv(gen_csv_file)
+avg_fitnesses = df_gen_info.groupby("population")["fitness"].mean()
+
 gen_min, gen_max = df_info["generation"].min(), df_info["generation"].max()
 print(f"Generations: {gen_min} to {gen_max}")
 populations_all = sorted(df_info["population"].unique())
@@ -41,6 +45,11 @@ def load_generation_mem(generation, pops, step):
     if pops:
         dfg = dfg[dfg["population"].isin(pops)]
     return dfg.iloc[::step]
+
+def load_generation_info_mem(generation):
+    """Return generation info row for generation."""
+    dfg = df_gen_info[df_gen_info["generation"] == generation]
+    return dfg
 
 
 # --- Plot setup ---
@@ -93,29 +102,16 @@ orientation_check = CheckButtons(
 )
 
 # --- Multi-selector for populations (checkbox list) ---
-ax_pop_list = plt.axes([0.85, 0.35, 0.06, 0.50])
+ax_pop_list = plt.axes([0.80, 0.35, 0.15, 0.50])
 pop_labels = [str(p) + "  " for p in populations_all]
 selected_pop_states = [False] * len(pop_labels)
 pop_check = CheckButtons(ax_pop_list, pop_labels, selected_pop_states)
-
-population_fitness_labels = []
-for p in populations_all:
-    population_fitness_labels.append(
-        ax.text(
-            0.82,
-            0.82 - populations_all.index(p) * 0.0237,
-            f"{p}",
-            transform=fig.transFigure,
-            fontsize=8,
-        )
-    )
 
 # --- Button for selecting top individuals ---
 ax_select_bests_check = plt.axes([0.8, 0.25, 0.15, 0.05])
 select_bests_check = CheckButtons(
     ax_select_bests_check, [f"Select Top {select_top_count}"], [is_selecting_bests]
 )
-
 
 # --- Button for selecting all individuals ---
 ax_select_all_button = plt.axes([0.8, 0.18, 0.15, 0.05])
@@ -127,7 +123,7 @@ clear_button = Button(ax_clear_button, "Clear Selections")
 
 # --- Animation controls (NEW) ---
 ax_animate_check = plt.axes([0.8, 0.06, 0.15, 0.05])
-animate_check = CheckButtons(ax_animate_check, ["Animate Pop. Positions"], [False])
+animate_check = CheckButtons(ax_animate_check, ["Animate"], [False])
 
 ax_speed = plt.axes([0.1, 0.05, 0.65, 0.03])
 slider_speed = Slider(ax_speed, "Speed (fps)", 1, 100.0, valinit=3.0, valstep=1)
@@ -135,8 +131,8 @@ slider_speed = Slider(ax_speed, "Speed (fps)", 1, 100.0, valinit=3.0, valstep=1)
 ax_frame = plt.axes([0.1, 0.01, 0.65, 0.03])
 slider_anim_frame = Slider(ax_frame, "Animation Frame", 0, 0, valinit=0, valstep=1)
 
-ax_play_button = plt.axes([0.8, 0.00, 0.07, 0.04])
-play_button = Button(ax_play_button, "Play")
+# ax_play_button = plt.axes([0.8, 0.00, 0.07, 0.04])
+# play_button = Button(ax_play_button, "Play")
 
 ax_step_button = plt.axes([0.88, 0.00, 0.07, 0.04])
 step_button = Button(ax_step_button, "Step")
@@ -219,20 +215,21 @@ def update(val):
 
     # If "select top" is checked, override selection to top populations
     if select_bests_check.get_status()[0]:
-        df_selecting = load_generation_mem(gen, [], 1 if SELECT_REAL_TOP else step)
-        if not df_selecting.empty:
-            avg_fitnesses = df_selecting.groupby("population")["fitness"].mean()
-            top = avg_fitnesses.nlargest(select_top_count).index.tolist()
-            # Update pop_check buttons (sync UI)
-            new_states = [p in top for p in populations_all]
-            for i, state in enumerate(new_states):
-                # toggle to desired state if necessary
-                if state != pop_check.get_status()[i]:
-                    pop_check.set_active(i)
-            selected_pops_local = sorted(set(top))
+        df_selecting_info = load_generation_info_mem(gen)
+
+        avg_fitnesses = df_selecting_info.groupby("population")["fitness"].mean()
+        top = avg_fitnesses.nlargest(select_top_count).index.tolist()
+        # Update pop_check buttons (sync UI)
+        new_states = [p in top for p in populations_all]
+        for i, state in enumerate(new_states):
+            # toggle to desired state if necessary
+            if state != pop_check.get_status()[i]:
+                pop_check.set_active(i)
+        selected_pops_local = sorted(set(top))
 
     # For static view, downsample rows using step
     df_new = load_generation_mem(gen, selected_pops_local, step)
+    df_new_info = load_generation_info_mem(gen)
 
     # Update scatter for static view
     if not df_new.empty:
@@ -278,16 +275,16 @@ def update(val):
     # --- Compute average fitness per population for labels (based on df_new) ---
     avg_fitnesses = {}
     if not df_new.empty:
-        avg_fitnesses = df_new.groupby("population")["fitness"].mean().to_dict()
+        avg_fitnesses = df_new_info.groupby("population")["fitness"].mean().to_dict()
 
     for i in range(len(pop_labels)):
         pop_check.labels[i].set_fontsize(8)
         pop_check.labels[i].set_fontweight("bold")
 
-    for i, label in enumerate(population_fitness_labels):
+    for i, label in enumerate(pop_check.labels):
         p = populations_all[i]
         fitness = avg_fitnesses.get(p, 0)
-        label.set_text(f"{fitness:.2f}")
+        label.set_text(f"{p} ({fitness:.2f})")
         label.set_fontweight("bold")
         color = plt.cm.viridis(norm(fitness))
         label.set_backgroundcolor(brighten_color(color, factor=0.7))
@@ -430,9 +427,9 @@ def toggle_animation(label):
             + [int(slider_pop.val)],
             per_pop_downsample=1,
         )
-        start_animation()
+        # start_animation()
     else:
-        stop_animation()
+        # stop_animation()
         # restore static rendering for current generation & selection
         update(None)
 
@@ -496,7 +493,7 @@ slider_speed.on_changed(
     if animate_check.get_status()[0]
     else None
 )
-play_button.on_clicked(play_pause)
+# play_button.on_clicked(play_pause)
 step_button.on_clicked(step_once)
 slider_anim_frame.on_changed(on_anim_slider_changed)
 

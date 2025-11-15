@@ -3,29 +3,29 @@ import numpy as np
 import mlp as ntw
 from typing import List
 
-HIDDEN_LAYERS = [16]
+HIDDEN_LAYERS = [12, 6]
 MIN_GROUND_SENSOR_VALUE = 280
 MAX_GROUND_SENSOR_VALUE = 760
 MIN_DISTANCE_SENSOR_VALUE = 80
-MAX_DISTANCE_SENSOR_VALUE = 1000
+MAX_DISTANCE_SENSOR_VALUE = 600
 PRINT_EVERY = 1000  # Print every n steps
 
 CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
 
 # --- BEHAVIOR ---
-OBSTACLE_TOLERANCE = 120  # 400
+OBSTACLE_TOLERANCE = 100  # 400
 CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
 MINIMUM_SPEED = 0.5
 STEPS_ON_LINE_TOLERANCE = 130
-EPSILON = 0.3  # Small value to determine if the robot is spinning
+EPSILON = 0.2  # Small value to determine if the robot is spinning
 MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 0.4
+W_FORWARD = 0.3
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
-W_SPINNING = 1.0
+W_SPINNING = 1.5
 
 # Encourage not being around obstacles for too long, avoid border stuck
 AVOID_BEING_STUCK_AROUND_OBSTACLE = -2
@@ -34,7 +34,7 @@ AVOID_BEING_STUCK_AROUND_OBSTACLE = -2
 AVOID_BACKWARD_WHEELS = -1
 CAMERA_DETECTS_OBSTACLE = -1
 AVOID_NO_ACCELERATION = -1
-AVOID_SLOW_ROBOT = -1  # Slow robot don't even see the obstacle
+AVOID_SLOW_ROBOT = -2  # Slow robot don't even see the obstacle
 REWARD_FOLLOWING_LINE = 0.5
 
 
@@ -51,7 +51,7 @@ class Controller:
         ### Add the number of neurons for each layer.
         ### The number of neurons should be in between of 1 to 20.
         ### Number of hidden layers should be one or two.
-        self.number_input_layer = 6  # 3 proximity + 3 ground sensors
+        self.number_input_layer = 7  # 3 proximity + 3 ground sensors
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
         self.number_hidden_layer = HIDDEN_LAYERS
@@ -134,6 +134,7 @@ class Controller:
         self.fitness_values = []
         self.fitness = 0
         self.current_fitness = 0
+        self.current_fitness_list = []
 
         # Add line tracking
         self.steps_on_white = 0
@@ -197,6 +198,7 @@ class Controller:
 
             # Reset fitness and line tracking when getting new genes
             self.fitness_values = []
+            self.current_fitness_list = []
             self.steps_on_white = 0
             self.max_steps_on_white = 0
             self.steps_on_line = 0
@@ -245,7 +247,7 @@ class Controller:
                     is_avoiding = True
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE:
                     # Penalty for being too close to an obstacle
-                    fitness = -0.2
+                    fitness = -0.4
 
         # accel = self.accelerometer.getValues()
         # if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
@@ -277,10 +279,10 @@ class Controller:
         # is_on_white = not (left or centre or right)
         followLineFitness = left
         if is_avoiding:
-            followLineFitness /= 3
+            followLineFitness /= 4
 
 
-        is_on_line = False
+        is_on_line = left
         # if left or is_avoiding:
         #     is_on_line = True
 
@@ -293,7 +295,7 @@ class Controller:
         # if self.steps_avoiding > 3000:
         #     followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
 
-        followLineFitness -= right
+        followLineFitness -= right * 1
 
         # Check if robot has lost the line
         # if not (left and centre and right) and not isAvoiding:
@@ -313,7 +315,7 @@ class Controller:
 
         return followLineFitness, is_on_line
 
-    def avoid_spinning(self, is_avoiding, followLineFitness):
+    def avoid_spinning(self, is_avoiding, is_on_line):
         spinningFitness = 0
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
@@ -331,10 +333,10 @@ class Controller:
         #     # Encourage going on white to avoid the obstacle
         #     if followLineFitness <= 0:``
         #         followLineFitness += 1
-            if left_speed > right_speed and followLineFitness > 1:
-                spinningFitness += 1
+            if left_speed > right_speed and is_on_line:
+                spinningFitness += 0.01
                 if speed_difference > EPSILON:
-                    spinningFitness += 2
+                    spinningFitness += 0.02
         else:
         #     self.steps_avoiding = 0
         #     # White penalty
@@ -345,7 +347,10 @@ class Controller:
             if speed_difference > EPSILON:
                 spinningFitness -= 1
 
-        if left_speed < 0 or right_speed < 0:
+            if right_speed < 0:
+                spinningFitness += AVOID_BACKWARD_WHEELS
+
+        if left_speed < 0:
             spinningFitness += AVOID_BACKWARD_WHEELS
 
         return spinningFitness
@@ -366,7 +371,7 @@ class Controller:
         printing = self.is_printing()
         avoidCollisionFitness, is_avoiding = self.avoid_collision()
         followLineFitness, is_on_line = self.stay_on_line(is_avoiding)
-        spinningFitness = self.avoid_spinning(is_avoiding, followLineFitness)
+        spinningFitness = self.avoid_spinning(is_avoiding, is_on_line)
         forwardFitness = self.encourage_speed(is_on_line)
 
         forwardFitness *= W_FORWARD
@@ -381,6 +386,8 @@ class Controller:
             + avoidCollisionFitness
             + spinningFitness
         )
+
+        self.current_fitness_list = [combinedFitness, forwardFitness, followLineFitness, avoidCollisionFitness, spinningFitness]
 
         self.fitness_values.append(combinedFitness)
         self.fitness = np.mean(self.fitness_values)
@@ -418,7 +425,7 @@ class Controller:
         self.emitter.send(string_message)
 
         # Send the self.current_fitness value to the supervisor
-        data = str(self.current_fitness)
+        data = data = ','.join(map(str, self.current_fitness_list)) 
         data = "current: " + data
         string_message = str(data)
         string_message = string_message.encode("utf-8")
@@ -501,8 +508,8 @@ class Controller:
                     # or i == 1
                     # or i == 2
                     # or i == 3
-                    # or i == 4
-                    i == 5
+                    i == 4
+                    or i == 5
                     or i == 6
                     or i == 7
                 ):
