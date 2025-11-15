@@ -25,7 +25,7 @@ MAX_MOTOR_SPEED = 3.0
 W_FORWARD = 0.3
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
-W_SPINNING = 1.5
+W_SPINNING = 1.2
 
 # Encourage not being around obstacles for too long, avoid border stuck
 AVOID_BEING_STUCK_AROUND_OBSTACLE = -2

@@ -17,6 +17,7 @@ csv_file = f"{directory}{filename}"
 gen_filename = filename.replace("robot_positions_", "generation_data_")
 gen_csv_file = f"{directory}{gen_filename}"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
+df_new_global = None  # for hover annotation
 df_gen_info = pd.read_csv(gen_csv_file)
 avg_fitnesses = df_gen_info.groupby("population")["fitness"].mean()
 
@@ -88,7 +89,7 @@ slider_step = Slider(ax_step, "Downsample Step", 1, 50, valinit=initial_step, va
 ax_pop = plt.axes([0.1, 0.10, 0.65, 0.03])
 slider_pop = Slider(
     ax_pop,
-    "Population ID (min-max)",
+    "Population ID",
     populations_all[0],
     populations_all[-1],
     valinit=populations_all[0],
@@ -125,9 +126,6 @@ clear_button = Button(ax_clear_button, "Clear Selections")
 ax_animate_check = plt.axes([0.8, 0.06, 0.15, 0.05])
 animate_check = CheckButtons(ax_animate_check, ["Animate"], [False])
 
-ax_speed = plt.axes([0.1, 0.05, 0.65, 0.03])
-slider_speed = Slider(ax_speed, "Speed (fps)", 1, 100.0, valinit=3.0, valstep=1)
-
 ax_frame = plt.axes([0.1, 0.01, 0.65, 0.03])
 slider_anim_frame = Slider(ax_frame, "Animation Frame", 0, 0, valinit=0, valstep=1)
 
@@ -147,6 +145,17 @@ anim_generation_locked = (
     initial_gen  # which generation animates (kept in sync with slider_gen at start)
 )
 
+# --- Hover annotation ---
+annot = ax.annotate(
+    "",
+    xy=(0, 0),
+    xytext=(20, -80),
+    textcoords="offset points",
+    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1),
+    arrowprops=dict(arrowstyle="->"),
+)
+annot.set_visible(False)
+hide_annot_button = Button(plt.axes([0.8, 0.00, 0.15, 0.04]), "Hide Annotation")
 
 def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     """
@@ -243,8 +252,13 @@ def update(val):
         sc.set_offsets(np.empty((0, 2)))
         sc.set_array(np.array([]))
 
+    # ax.set_title(
+    #     f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points"
+    # )
+    
     ax.set_title(
-        f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points"
+        f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points",
+        pad=20,
     )
 
     # Remove old arrows
@@ -300,6 +314,9 @@ def update(val):
 
     fig.canvas.draw_idle()
 
+    global df_new_global
+    df_new_global = df_new
+
 
 # --- Button callback to select all ---
 def select_all(event):
@@ -311,6 +328,7 @@ def select_all(event):
 
 # --- Button callback to clear selections ---
 def clear_selections(event):
+    select_bests_check.set_active(0)  # uncheck "select top"
     for i in range(len(pop_labels)):
         if pop_check.get_status()[i]:
             pop_check.set_active(i)
@@ -373,6 +391,10 @@ def render_animation_frame(frame_idx):
     ax.set_title(
         f"Generation {anim_generation_locked} — anim frame {frame_idx + 1}/{anim_max_frames}"
     )
+    # Always show tooltip if only 1 point on the animation
+    if len(pts) == 1:
+        update_annot(0, df_all, pts[0][0], pts[0][1])
+        annot.set_visible(True)
     fig.canvas.draw_idle()
 
 
@@ -382,36 +404,6 @@ def animate_frame(i):
     render_animation_frame(anim_frame)
     slider_anim_frame.set_val(anim_frame)
     return (sc,)
-
-
-def start_animation():
-    global anim, anim_running, anim_frame
-    if anim_running:
-        return
-    fps = max(0.1, slider_speed.val)
-    interval = 1000.0 / fps
-    # use frames=range(anim_max_frames) to cycle through indexes then loop with repeat=True
-    anim = FuncAnimation(
-        fig,
-        animate_frame,
-        frames=range(anim_max_frames),
-        interval=interval,
-        blit=False,
-        repeat=True,
-    )
-    anim_running = True
-
-
-def stop_animation():
-    global anim, anim_running
-    if anim is not None:
-        try:
-            anim.event_source.stop()
-        except Exception:
-            pass
-        anim = None
-    anim_running = False
-
 
 def toggle_animation(label):
     # when checkbox toggled
@@ -427,38 +419,10 @@ def toggle_animation(label):
             + [int(slider_pop.val)],
             per_pop_downsample=1,
         )
-        # start_animation()
     else:
         # stop_animation()
         # restore static rendering for current generation & selection
         update(None)
-
-
-def play_pause(event):
-    # toggles running state (if animation checkbox not checked, enable it)
-    if not animate_check.get_status()[0]:
-        # turn on animation checkbox
-        animate_check.set_active(0)
-        toggle_animation(None)
-        return
-    global anim_running
-    if anim_running:
-        # pause
-        if anim is not None:
-            try:
-                anim.event_source.stop()
-            except Exception:
-                pass
-        anim_running = False
-    else:
-        # resume
-        if anim is not None:
-            try:
-                anim.event_source.start()
-            except Exception:
-                pass
-        anim_running = True
-
 
 def step_once(event):
     # advance one animation frame (works even if not animating)
@@ -476,6 +440,47 @@ def on_anim_slider_changed(val):
     anim_frame = int(val)
     render_animation_frame(anim_frame)
 
+def update_annot(idx, df_source, x, y):
+    """Update annotation text and position."""
+    # get real row from df_source (df_new in static mode, or anim frame data)
+    row = df_source.iloc[idx]
+
+    text = (
+        f"Population: {row['population']}\n"
+        f"Fitness: {row['fitness']:.3f}\n"
+        f"Forward: {row['forward_fitness']:.3f}\n"
+        f"Line: {row['line_fitness']:.3f}\n"
+        f"Collision: {row['collision_fitness']:.3f}\n"
+        f"Spinning: {row['spinning_fitness']:.3f}"
+    )
+
+    annot.xy = (x, y)
+    annot.set_text(text)
+    annot.get_bbox_patch().set_facecolor("white")
+    annot.get_bbox_patch().set_alpha(0.9)
+
+def on_hover(event):
+    # if event.inaxes != ax:
+    #     annot.set_visible(False)
+    #     fig.canvas.draw_idle()
+    #     return
+
+    cont, ind = sc.contains(event)
+    if cont:
+        # show values from the currently displayed df
+        idx = ind["ind"][0]  # first point
+        x, y = sc.get_offsets()[idx]
+        update_annot(idx, df_new_global, x, y)
+        annot.set_visible(True)
+        fig.canvas.draw_idle()
+    # else:
+    #     if annot.get_visible():
+    #         annot.set_visible(False)
+    #         fig.canvas.draw_idle()
+
+def hide_annot(event):
+    annot.set_visible(False)
+    fig.canvas.draw_idle()
 
 # Connect controls
 slider_gen.on_changed(update)
@@ -488,14 +493,11 @@ select_all_button.on_clicked(select_all)
 clear_button.on_clicked(clear_selections)
 
 animate_check.on_clicked(toggle_animation)
-slider_speed.on_changed(
-    lambda val: (stop_animation(), start_animation())
-    if animate_check.get_status()[0]
-    else None
-)
-# play_button.on_clicked(play_pause)
 step_button.on_clicked(step_once)
 slider_anim_frame.on_changed(on_anim_slider_changed)
+hide_annot_button.on_clicked(hide_annot)
+
+fig.canvas.mpl_connect("motion_notify_event", on_hover)
 
 
 # initial build
