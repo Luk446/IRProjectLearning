@@ -1,2 +1,5 @@
 data/*
+!data/ga_parameters_20251110-1023*
+!data/genome_data_20251110-10240*
 !data/.gitkeep
+logs/*
