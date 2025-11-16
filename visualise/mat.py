@@ -328,7 +328,7 @@ def select_all(event):
 
 # --- Button callback to clear selections ---
 def clear_selections(event):
-    select_bests_check.set_active(0)  # uncheck "select top"
+    select_bests_check.set_active(0, False)  # uncheck "select top"
     for i in range(len(pop_labels)):
         if pop_check.get_status()[i]:
             pop_check.set_active(i)
@@ -445,13 +445,19 @@ def update_annot(idx, df_source, x, y):
     # get real row from df_source (df_new in static mode, or anim frame data)
     row = df_source.iloc[idx]
 
+    # One index can give multiple rows if there are duplicates; take the first
+    row_count = len(df_source[(df_source["x"] == x) & (df_source["y"] == y)])
+
     text = (
         f"Population: {row['population']}\n"
         f"Fitness: {row['fitness']:.3f}\n"
         f"Forward: {row['forward_fitness']:.3f}\n"
         f"Line: {row['line_fitness']:.3f}\n"
         f"Collision: {row['collision_fitness']:.3f}\n"
-        f"Spinning: {row['spinning_fitness']:.3f}"
+        f"Spinning: {row['spinning_fitness']:.3f}\n"
+        f"X: {row['x']:.3f}\n"
+        f"Y: {row['y']:.3f}\n"
+        f"Points at this position: {row_count}"
     )
 
     annot.xy = (x, y)

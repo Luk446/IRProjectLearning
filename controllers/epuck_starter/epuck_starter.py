@@ -17,15 +17,15 @@ OBSTACLE_TOLERANCE = 100  # 400
 CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
 MINIMUM_SPEED = 0.5
 STEPS_ON_LINE_TOLERANCE = 130
-EPSILON = 0.2  # Small value to determine if the robot is spinning
+EPSILON = 0.6  # Small value to determine if the robot is spinning
 MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 0.3
+W_FORWARD = 0.2
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
-W_SPINNING = 1.2
+W_SPINNING = 1.1
 
 # Encourage not being around obstacles for too long, avoid border stuck
 AVOID_BEING_STUCK_AROUND_OBSTACLE = -2
@@ -35,7 +35,8 @@ AVOID_BACKWARD_WHEELS = -1
 CAMERA_DETECTS_OBSTACLE = -1
 AVOID_NO_ACCELERATION = -1
 AVOID_SLOW_ROBOT = -2  # Slow robot don't even see the obstacle
-REWARD_FOLLOWING_LINE = 0.5
+ON_WHITE_PENALTY = 0.5
+AVOID_COLLISION_PENALTY = -0.1
 
 
 class Controller:
@@ -234,7 +235,7 @@ class Controller:
             return True
         return False
 
-    def avoid_collision(self):
+    def avoid_collision(self, is_turning):
         fitness = 0
         is_avoiding = False
         # Get front distance sensors values
@@ -245,9 +246,9 @@ class Controller:
             if ds_value < MAX_DISTANCE_SENSOR_VALUE * 3:
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE:
                     is_avoiding = True
-                if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE:
+                if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE and not is_turning:
                     # Penalty for being too close to an obstacle
-                    fitness = -0.4
+                    fitness += AVOID_COLLISION_PENALTY
 
         # accel = self.accelerometer.getValues()
         # if abs(accel[0]) < EPSILON and abs(accel[1]) < EPSILON:
@@ -276,6 +277,8 @@ class Controller:
         centre = self.center_ir.getValue() < 700
         right = self.right_ir.getValue() < 700
 
+        is_on_white = not left and not centre and not right
+
         # is_on_white = not (left or centre or right)
         followLineFitness = left
         if is_avoiding:
@@ -286,11 +289,11 @@ class Controller:
         # if left or is_avoiding:
         #     is_on_line = True
 
-        # if is_on_white:
-        #     if is_avoiding:
-        #         followLineFitness += 0.1
-        #     else:
-        #         followLineFitness -= REWARD_FOLLOWING_LINE
+        if is_on_white:
+            if is_avoiding:
+                followLineFitness += 0.1
+            else:
+                followLineFitness -= ON_WHITE_PENALTY
 
         # if self.steps_avoiding > 3000:
         #     followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
@@ -315,8 +318,7 @@ class Controller:
 
         return followLineFitness, is_on_line
 
-    def avoid_spinning(self, is_avoiding, is_on_line):
-        spinningFitness = 0
+    def get_is_turning(self):
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
         speed_sum = abs(left_speed) + abs(right_speed)
@@ -325,6 +327,15 @@ class Controller:
         else:
             speed_difference = abs(left_speed - right_speed) / speed_sum
 
+        if speed_difference > EPSILON:
+            return True
+        return False
+
+    def avoid_spinning(self, is_avoiding, is_on_line, is_turning):
+        spinningFitness = 0
+        left_speed = self.left_motor.getVelocity()
+        right_speed = self.right_motor.getVelocity()
+        
         # print(f"Left speed: {left_speed}, Right speed: {right_speed}, Speed difference: {speed_difference}")
 
         # Discourage negative correlation between wheel speeds
@@ -334,9 +345,9 @@ class Controller:
         #     if followLineFitness <= 0:``
         #         followLineFitness += 1
             if left_speed > right_speed and is_on_line:
-                spinningFitness += 0.01
-                if speed_difference > EPSILON:
-                    spinningFitness += 0.02
+                spinningFitness += 0.02
+                if is_turning:
+                    spinningFitness += 0.05
         else:
         #     self.steps_avoiding = 0
         #     # White penalty
@@ -344,14 +355,14 @@ class Controller:
         #     #     followLineFitness -= 3
 
         #     # Discourage large differences between wheel speeds
-            if speed_difference > EPSILON:
+            if is_turning:
                 spinningFitness -= 1
 
-            if right_speed < 0:
-                spinningFitness += AVOID_BACKWARD_WHEELS
+        #     if right_speed < 0:
+        #         spinningFitness += AVOID_BACKWARD_WHEELS
 
-        if left_speed < 0:
-            spinningFitness += AVOID_BACKWARD_WHEELS
+        # if left_speed < 0:
+        #     spinningFitness += AVOID_BACKWARD_WHEELS
 
         return spinningFitness
 
@@ -365,13 +376,16 @@ class Controller:
         forwardFitness = (left_speed + right_speed) / (2 * MAX_MOTOR_SPEED)
         if forwardFitness < MINIMUM_SPEED / MAX_MOTOR_SPEED:
             forwardFitness += AVOID_SLOW_ROBOT
+        elif not is_on_line:
+            forwardFitness /= 4
         return forwardFitness
 
     def calculate_fitness(self):
         printing = self.is_printing()
-        avoidCollisionFitness, is_avoiding = self.avoid_collision()
+        is_turning = self.get_is_turning()
+        avoidCollisionFitness, is_avoiding = self.avoid_collision(is_turning)
         followLineFitness, is_on_line = self.stay_on_line(is_avoiding)
-        spinningFitness = self.avoid_spinning(is_avoiding, is_on_line)
+        spinningFitness = self.avoid_spinning(is_avoiding, is_on_line, is_turning)
         forwardFitness = self.encourage_speed(is_on_line)
 
         forwardFitness *= W_FORWARD
