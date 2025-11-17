@@ -6,26 +6,26 @@ from typing import List
 HIDDEN_LAYERS = [12, 6]
 MIN_GROUND_SENSOR_VALUE = 280
 MAX_GROUND_SENSOR_VALUE = 760
-MIN_DISTANCE_SENSOR_VALUE = 80
-MAX_DISTANCE_SENSOR_VALUE = 600
+MIN_DISTANCE_SENSOR_VALUE = 78
+MAX_DISTANCE_SENSOR_VALUE = 175
 PRINT_EVERY = 1000  # Print every n steps
 
 CHECK_CAMERA_EVERY = 10  # how many steps between camera error checks
 
 # --- BEHAVIOR ---
-OBSTACLE_TOLERANCE = 100  # 400
+OBSTACLE_TOLERANCE = 60  # 400
 CAMERA_DETECTS_OBSTACLE_PERCENTAGE = 5
-MINIMUM_SPEED = 0.5
+MINIMUM_SPEED = 0.2
 STEPS_ON_LINE_TOLERANCE = 130
-EPSILON = 0.6  # Small value to determine if the robot is spinning
+EPSILON = 0.8  # Small value to determine if the robot is spinning
 MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 0.2
+W_FORWARD = 0.3
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
-W_SPINNING = 1.1
+W_SPINNING = 1.0
 
 # Encourage not being around obstacles for too long, avoid border stuck
 AVOID_BEING_STUCK_AROUND_OBSTACLE = -2
@@ -35,8 +35,8 @@ AVOID_BACKWARD_WHEELS = -1
 CAMERA_DETECTS_OBSTACLE = -1
 AVOID_NO_ACCELERATION = -1
 AVOID_SLOW_ROBOT = -2  # Slow robot don't even see the obstacle
-ON_WHITE_PENALTY = 0.5
-AVOID_COLLISION_PENALTY = -0.1
+ON_WHITE_PENALTY = 0.05
+AVOID_COLLISION_PENALTY = -0.2
 
 
 class Controller:
@@ -145,6 +145,7 @@ class Controller:
         self.steps_on_line_tolerance = 0
         self.has_lost_line = False
         self.steps_avoiding = 0
+        self.max_spin = 0
 
         self.print_every = 0
 
@@ -206,6 +207,7 @@ class Controller:
             self.max_steps_on_line = 0
             self.steps_on_line_tolerance = 0
             self.has_lost_line = False
+            self.max_spin = 0
 
             self.print_every = 0
 
@@ -243,7 +245,7 @@ class Controller:
         for ds in self.proximity_sensors:
             ds_value = ds.getValue()
             # Avoid sensor noise
-            if ds_value < MAX_DISTANCE_SENSOR_VALUE * 3:
+            if ds_value < 5000:
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE:
                     is_avoiding = True
                 if ds_value > MIN_DISTANCE_SENSOR_VALUE + OBSTACLE_TOLERANCE and not is_turning:
@@ -291,7 +293,7 @@ class Controller:
 
         if is_on_white:
             if is_avoiding:
-                followLineFitness += 0.1
+                followLineFitness += 0.2
             else:
                 followLineFitness -= ON_WHITE_PENALTY
 
@@ -321,11 +323,12 @@ class Controller:
     def get_is_turning(self):
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
-        speed_sum = abs(left_speed) + abs(right_speed)
-        if speed_sum == 0:
-            speed_difference = 0
-        else:
-            speed_difference = abs(left_speed - right_speed) / speed_sum
+
+        diff = abs(left_speed - right_speed)
+        speed_difference = diff / 6
+
+        if speed_difference > self.max_spin:
+            self.max_spin = speed_difference
 
         if speed_difference > EPSILON:
             return True
@@ -335,7 +338,7 @@ class Controller:
         spinningFitness = 0
         left_speed = self.left_motor.getVelocity()
         right_speed = self.right_motor.getVelocity()
-        
+
         # print(f"Left speed: {left_speed}, Right speed: {right_speed}, Speed difference: {speed_difference}")
 
         # Discourage negative correlation between wheel speeds
@@ -345,9 +348,9 @@ class Controller:
         #     if followLineFitness <= 0:``
         #         followLineFitness += 1
             if left_speed > right_speed and is_on_line:
-                spinningFitness += 0.02
+                spinningFitness += 0.1
                 if is_turning:
-                    spinningFitness += 0.05
+                    spinningFitness += 0.2
         else:
         #     self.steps_avoiding = 0
         #     # White penalty
@@ -366,7 +369,7 @@ class Controller:
 
         return spinningFitness
 
-    def encourage_speed(self, is_on_line):
+    def encourage_speed(self, is_avoiding, is_on_line):
         # if not is_on_line:
         #     return 0
         forwardFitness = 0
@@ -374,10 +377,10 @@ class Controller:
         right_speed = self.right_motor.getVelocity()
 
         forwardFitness = (left_speed + right_speed) / (2 * MAX_MOTOR_SPEED)
-        if forwardFitness < MINIMUM_SPEED / MAX_MOTOR_SPEED:
-            forwardFitness += AVOID_SLOW_ROBOT
-        elif not is_on_line:
+        if not is_on_line or is_avoiding:
             forwardFitness /= 4
+        elif forwardFitness < MINIMUM_SPEED / MAX_MOTOR_SPEED:
+            forwardFitness += AVOID_SLOW_ROBOT
         return forwardFitness
 
     def calculate_fitness(self):
@@ -386,7 +389,7 @@ class Controller:
         avoidCollisionFitness, is_avoiding = self.avoid_collision(is_turning)
         followLineFitness, is_on_line = self.stay_on_line(is_avoiding)
         spinningFitness = self.avoid_spinning(is_avoiding, is_on_line, is_turning)
-        forwardFitness = self.encourage_speed(is_on_line)
+        forwardFitness = self.encourage_speed(is_avoiding, is_on_line)
 
         forwardFitness *= W_FORWARD
         followLineFitness *= W_FOLLOW_LINE
@@ -409,7 +412,7 @@ class Controller:
 
         if printing:
             print(
-                "Fitness: {:.1f}, Forward: {:.1f}, Follow Line: {:.1f}, Avoid Collision: {:.1f}, Spinning: {:.1f}, MaxLine: {}-{}, Avoid: {}".format(
+                "Fitness: {:.1f}, Forward: {:.1f}, Follow Line: {:.1f}, Collision: {:.1f}, Spinning: {:.1f}, MaxLine: {}-{}, maxspin: {:.1f}".format(
                     self.fitness,
                     forwardFitness,
                     followLineFitness,
@@ -417,7 +420,7 @@ class Controller:
                     spinningFitness,
                     self.max_steps_on_line,
                     "X" if self.has_lost_line else "O",
-                    self.steps_avoiding,
+                    self.max_spin
                 )
             )
 

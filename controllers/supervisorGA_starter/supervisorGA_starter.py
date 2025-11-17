@@ -28,7 +28,7 @@ class SupervisorGA:
         # Simulation Parameters
         # Please, do not change these parameters
         self.time_step = 32  # ms
-        self.time_experiment = 100  # s
+        self.time_experiment = 300  # s
 
         # Initiate Supervisor Module
         self.supervisor = Supervisor()
@@ -169,7 +169,7 @@ class SupervisorGA:
 
         # Measure fitness
         fitness = self.receivedFitness
-        print("{}.Fitness: {}".format(population, fitness))
+        print("{}.Fitness: {:.2f}".format(population, fitness))
         # current = (generation, genotype, fitness)
         # self.genotypes.append(current)
 
@@ -193,10 +193,10 @@ class SupervisorGA:
 
         return fitness
 
-    def run_demo(self, ):
+    def run_demo(self):
         print("Running Best Individual Demo ...\n")
         # Read File
-        genotype = numpy.load("Best.npy")
+        genotype = numpy.load("Best6.npy")
         # Send Genotype to controller
         self.emitterData = str(genotype)
 
