@@ -149,13 +149,12 @@ anim_generation_locked = (
 annot = ax.annotate(
     "",
     xy=(0, 0),
-    xytext=(20, -80),
+    xytext=(-150, -90),
     textcoords="offset points",
     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1),
     arrowprops=dict(arrowstyle="->"),
 )
 annot.set_visible(False)
-hide_annot_button = Button(plt.axes([0.8, 0.00, 0.15, 0.04]), "Hide Annotation")
 
 def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     """
@@ -466,10 +465,10 @@ def update_annot(idx, df_source, x, y):
     annot.get_bbox_patch().set_alpha(0.9)
 
 def on_hover(event):
-    # if event.inaxes != ax:
-    #     annot.set_visible(False)
-    #     fig.canvas.draw_idle()
-    #     return
+    if event.inaxes != ax:
+        annot.set_visible(False)
+        fig.canvas.draw_idle()
+        return
 
     cont, ind = sc.contains(event)
     if cont:
@@ -479,14 +478,10 @@ def on_hover(event):
         update_annot(idx, df_new_global, x, y)
         annot.set_visible(True)
         fig.canvas.draw_idle()
-    # else:
-    #     if annot.get_visible():
-    #         annot.set_visible(False)
-    #         fig.canvas.draw_idle()
-
-def hide_annot(event):
-    annot.set_visible(False)
-    fig.canvas.draw_idle()
+    else:
+        if annot.get_visible():
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
 
 # Connect controls
 slider_gen.on_changed(update)
@@ -501,7 +496,6 @@ clear_button.on_clicked(clear_selections)
 animate_check.on_clicked(toggle_animation)
 step_button.on_clicked(step_once)
 slider_anim_frame.on_changed(on_anim_slider_changed)
-hide_annot_button.on_clicked(hide_annot)
 
 fig.canvas.mpl_connect("motion_notify_event", on_hover)
 
