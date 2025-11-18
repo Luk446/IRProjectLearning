@@ -196,7 +196,7 @@ class SupervisorGA:
     def run_demo(self):
         print("Running Best Individual Demo ...\n")
         # Read File
-        genotype = numpy.load("Best6.npy")
+        genotype = numpy.load("Best8.npy")
         # Send Genotype to controller
         self.emitterData = str(genotype)
 

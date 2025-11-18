@@ -22,7 +22,7 @@ MAX_MOTOR_SPEED = 3.0
 
 # --- FITNESSES ---
 
-W_FORWARD = 0.3
+W_FORWARD = 0.5
 W_FOLLOW_LINE = 1.0
 W_COLLISION = 1.0
 W_SPINNING = 1.0
@@ -300,7 +300,7 @@ class Controller:
         # if self.steps_avoiding > 3000:
         #     followLineFitness += AVOID_BEING_STUCK_AROUND_OBSTACLE
 
-        followLineFitness -= right * 1
+        followLineFitness -= right * 0.5
 
         # Check if robot has lost the line
         # if not (left and centre and right) and not isAvoiding:
