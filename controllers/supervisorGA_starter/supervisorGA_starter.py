@@ -193,10 +193,10 @@ class SupervisorGA:
 
         return fitness
 
-    def run_demo(self):
+    def run_demo(self, robot_file="Best.npy"):
         print("Running Best Individual Demo ...\n")
         # Read File
-        genotype = numpy.load("Best8.npy")
+        genotype = numpy.load(robot_file)
         # Send Genotype to controller
         self.emitterData = str(genotype)
 
@@ -302,8 +302,12 @@ if __name__ == "__main__":
                 "Optimization: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )
         elif resp == 82 or resp == 65619:  # R or r key
-            # gaModel.run_demo()
             gaModel.run_demo()
             print(
                 "Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
+            )
+        elif resp == 81 or resp == 65619:  # Q or q key
+            gaModel.run_demo("Best_reference.npy")
+            print(
+                "Reference: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )
