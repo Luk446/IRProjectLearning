@@ -28,7 +28,7 @@ class SupervisorGA:
         # Simulation Parameters
         # Please, do not change these parameters
         self.time_step = 32  # ms
-        self.time_experiment = 300  # s
+        self.time_experiment = 30  # s
 
         # Initiate Supervisor Module
         self.supervisor = Supervisor()
@@ -109,7 +109,7 @@ class SupervisorGA:
                 if float_list_str:
                     self.receivedCurrentFitness = [float(item) for item in float_list_str.split(',')]
                 else:
-                    self.receivedCurrentFitness = [0.0, 0.0, 0.0, 0.0, 0.0]
+                    self.receivedCurrentFitness = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 # print("Received Fitness:", self.receivedFitness)
             self.receiver.nextPacket()
 
@@ -137,10 +137,12 @@ class SupervisorGA:
             robot_orientation = self.robot_node.getOrientation()
             robot_state = {
                 "fitness": round(self.receivedCurrentFitness[0], 2),
-                "forward_fitness": round(self.receivedCurrentFitness[1], 2),
-                "line_fitness": round(self.receivedCurrentFitness[2], 2),
-                "collision_fitness": round(self.receivedCurrentFitness[3], 2),
-                "spinning_fitness": round(self.receivedCurrentFitness[4], 2),
+                "line_fitness": round(self.receivedCurrentFitness[1], 2),
+                "collision_fitness": round(self.receivedCurrentFitness[2], 2),
+                "forward_fitness": round(self.receivedCurrentFitness[3], 2),
+                "follow_line_fitness": round(self.receivedCurrentFitness[4], 2),
+                "avoid_collision_fitness": round(self.receivedCurrentFitness[5], 2),
+                "spinning_fitness": round(self.receivedCurrentFitness[6], 2),
                 "x": round(robot_pos[0], 2),
                 "y": round(robot_pos[1], 2),
                 "ox": round(robot_orientation[0], 2),

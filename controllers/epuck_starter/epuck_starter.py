@@ -2,12 +2,13 @@ from controller import Robot, Motor, DistanceSensor
 import numpy as np
 import mlp as ntw
 from typing import List
+import math
 
 HIDDEN_LAYERS = [12, 6]
-MIN_GROUND_SENSOR_VALUE = 280
-MAX_GROUND_SENSOR_VALUE = 760
-MIN_DISTANCE_SENSOR_VALUE = 78
-MAX_DISTANCE_SENSOR_VALUE = 175
+MIN_GROUND_SENSOR_VALUE = 280  # Black -> 0
+MAX_GROUND_SENSOR_VALUE = 760  # White -> 1
+MIN_DISTANCE_SENSOR_VALUE = 78  # No obstacle -> 0
+MAX_DISTANCE_SENSOR_VALUE = 175  # Very close obstacle -> 1
 PRINT_EVERY = 1000  # Print every n steps
 
 
@@ -24,7 +25,7 @@ class Controller:
         ### Add the number of neurons for each layer.
         ### The number of neurons should be in between of 1 to 20.
         ### Number of hidden layers should be one or two.
-        self.number_input_layer = 7  # 8 proximity + 3 ground sensors
+        self.number_input_layer = 11  # 8 proximity + 3 ground sensors
         # Example with one hidden layers: self.number_hidden_layer = [5]
         # Example with two hidden layers: self.number_hidden_layer = [7,5]
         self.number_hidden_layer = HIDDEN_LAYERS
@@ -209,23 +210,56 @@ class Controller:
         return False
 
     def calculate_fitness(self):
+        # Black = 0, White = 1
+        gs_left = 1 - self.inputs[0]
+        gs_center = 1 - self.inputs[1]
+        gs_right = 1 - self.inputs[2]
+
+        # No obstacle = 0, Very close obstacle = 1
+        ds_front_right = self.inputs[6]
+        ds_front_right_bis = self.inputs[5]
+        ds_right = self.inputs[4]
+        ds_back_right = self.inputs[3]
+        ds_front_left = self.inputs[10]
+        ds_front_left_bis = self.inputs[9]
+        ds_left = self.inputs[8]
+        ds_back_left = self.inputs[7]
+
+        # self.velocity_left and self.velocity_right are in range [-1, 1]
+
+        FOLLOW_LINE_WEIGHT = 1
+        OBSTACLE_AVOIDANCE_WEIGHT = 0.10
+
         printing = self.is_printing()
 
-        forwardFitness = 0
-
-        followLineFitness = 0
-
+        forwardFitness = (self.velocity_left + self.velocity_right) / 2
+        followLineFitness = max(0.4, gs_left - gs_right)
         avoidCollisionFitness = 0
+        for ds in self.inputs[3:11]:
+            avoidCollisionFitness = max(avoidCollisionFitness, ds)
+        # if avoidCollisionFitness > 0:
+        #     self.steps_avoiding += 1
+        # else:
+        #     self.steps_avoiding = 0
+        spinningFitness = 1 - (abs(self.velocity_left - self.velocity_right) / 2) ** (1/5)
 
-        spinningFitness = 0
+        lineFitness = forwardFitness * followLineFitness * spinningFitness * (1 - avoidCollisionFitness)
+        collisionFitness = 1
+        if avoidCollisionFitness > 0.2:
+            collisionFitness *= max(1, -math.log2(avoidCollisionFitness))
+        else:
+            collisionFitness *= 0
+
+        lineFitness *= FOLLOW_LINE_WEIGHT
+        collisionFitness *= OBSTACLE_AVOIDANCE_WEIGHT
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
-        combinedFitness = (
-            forwardFitness + followLineFitness + avoidCollisionFitness + spinningFitness
-        )
+        combinedFitness = lineFitness + collisionFitness
 
         self.current_fitness_list = [
             combinedFitness,
+            lineFitness,
+            collisionFitness,
             forwardFitness,
             followLineFitness,
             avoidCollisionFitness,
@@ -347,11 +381,11 @@ class Controller:
             for i in range(8):
                 ### Select the distance sensors that you will use
                 if (
-                    # i == 0
-                    # or i == 1
-                    # or i == 2
-                    # or i == 3
-                    i == 4
+                    i == 0
+                    or i == 1
+                    or i == 2
+                    or i == 3
+                    or i == 4
                     or i == 5
                     or i == 6
                     or i == 7
