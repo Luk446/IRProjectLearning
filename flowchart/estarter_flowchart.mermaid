@@ -1,0 +1,49 @@
+flowchart TD
+
+subgraph Value Inputs
+    direction TB
+    SV[("Sensor Values")]
+    BV[("Behaviour Value")]
+    FW[("Fitness Weights")]
+    PV[("Penalty Values")]
+end
+
+
+subgraph Fitness Functions
+    direction TB
+    dAC("Avoid Collision")
+    dON("Stay on Line")
+    dGT("Is it Turning?")
+    dAS("Avoid Spinning")
+    dEP("Encourage Speed")
+end
+
+def[(Working Values)]
+
+SV --> def
+BV --> def
+FW --> def
+PV --> def
+
+def --> dAC
+def --> dON
+def --> dGT
+def --> dAS
+def --> dEP
+
+subgraph Calculate Fitness
+    direction TB
+    CF["Calculate Fitness
+    .
+    .
+    .
+    "]
+
+end
+
+
+dAC --> CF
+dON --> CF
+dGT --> CF
+dAS --> CF
+dEP --> CF
