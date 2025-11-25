@@ -4,18 +4,26 @@ from matplotlib.widgets import Slider, CheckButtons, Button
 import numpy as np
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation
-from mat_utils import brighten_color, get_latest_robot_position_file
+from mat_utils import brighten_color, get_latest_robot_position_folder
 import sys
 
 # --- Initial parameters ---
 directory = "../controllers/supervisorGA_starter/data/"
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    arg = sys.argv[1]
+    # if "dir" is -1, takes the 1 and not 0, if "dir" is -2, takes the 2 and not 1, ...
+    try:
+        id = int(arg)
+    except ValueError:
+        pass
+    if isinstance(id, int):
+        foldername = get_latest_robot_position_folder(directory, id=abs(id))
+    else:
+        foldername = str(arg)
 else:
-    filename = get_latest_robot_position_file(directory)
-csv_file = f"{directory}{filename}"
-gen_filename = filename.replace("robot_positions_", "generation_data_")
-gen_csv_file = f"{directory}{gen_filename}"
+    foldername = get_latest_robot_position_folder(directory)
+csv_file = f"{directory}{foldername}/robot_position.csv"
+gen_csv_file = f"{directory}{foldername}/genome_data.csv"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
 df_new_global = None  # for hover annotation
 df_gen_info = pd.read_csv(gen_csv_file)
@@ -47,6 +55,7 @@ def load_generation_mem(generation, pops, step):
         dfg = dfg[dfg["population"].isin(pops)]
     return dfg.iloc[::step]
 
+
 def load_generation_info_mem(generation):
     """Return generation info row for generation."""
     dfg = df_gen_info[df_gen_info["generation"] == generation]
@@ -55,6 +64,7 @@ def load_generation_info_mem(generation):
 
 # --- Plot setup ---
 fig, ax = plt.subplots(figsize=(10, 8))
+fig.canvas.manager.set_window_title(foldername)
 plt.subplots_adjust(left=0.1, bottom=0.40, right=0.7)  # space for widgets
 
 sc = ax.scatter(
@@ -82,7 +92,9 @@ slider_gen = Slider(
 
 # --- Slider for downsampling ---
 ax_down_sample_step = plt.axes([0.1, 0.15, 0.65, 0.03])
-slider_downsample_step = Slider(ax_down_sample_step, "Downsample Step", 1, 50, valinit=initial_step, valstep=1)
+slider_downsample_step = Slider(
+    ax_down_sample_step, "Downsample Step", 1, 50, valinit=initial_step, valstep=1
+)
 
 
 # --- Slider for population (single numeric picker) ---
@@ -159,6 +171,7 @@ annot = ax.annotate(
 )
 annot.set_visible(False)
 
+
 def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     """
     Build anim_data and anim_max_frames for the current generation and selection.
@@ -200,6 +213,7 @@ def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
         slider_anim_frame.set_val(0)  # reset to start
     if anim_max_frames == 0:
         anim_max_frames = 1
+
 
 def update(val):
     """
@@ -259,7 +273,7 @@ def update(val):
     # ax.set_title(
     #     f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points"
     # )
-    
+
     ax.set_title(
         f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points",
         pad=20,
@@ -412,6 +426,7 @@ def animate_frame(i):
     slider_anim_frame.set_val(anim_frame)
     return (sc,)
 
+
 def toggle_animation(label):
     # when checkbox toggled
     if animate_check.get_status()[0]:
@@ -424,7 +439,9 @@ def toggle_animation(label):
                 for lbl, state in zip(pop_labels, pop_check.get_status())
                 if state
             ]
-            + [val] if val != -1 else [],
+            + [val]
+            if val != -1
+            else [],
             per_pop_downsample=1,
         )
         step_button.ax.set_visible(True)
@@ -435,6 +452,7 @@ def toggle_animation(label):
         slider_anim_frame.ax.set_visible(False)
         # restore static rendering for current generation & selection
         update(None)
+
 
 def step_once(event):
     # advance one animation frame (works even if not animating)
@@ -448,6 +466,7 @@ def on_anim_slider_changed(val):
     global anim_frame
     anim_frame = int(val)
     render_animation_frame(anim_frame)
+
 
 def update_annot(idx, df_source, x, y):
     """Update annotation text and position."""
@@ -478,6 +497,7 @@ def update_annot(idx, df_source, x, y):
     annot.get_bbox_patch().set_facecolor("white")
     annot.get_bbox_patch().set_alpha(0.9)
 
+
 def on_hover(event):
     if event.inaxes != ax:
         annot.set_visible(False)
@@ -496,6 +516,7 @@ def on_hover(event):
         if annot.get_visible():
             annot.set_visible(False)
             fig.canvas.draw_idle()
+
 
 def on_point_click(event):
     if event.inaxes != ax:
@@ -521,6 +542,7 @@ def on_point_click(event):
             elif status:
                 pop_check.set_active(i)
         update(None)
+
 
 # Connect controls
 slider_gen.on_changed(update)

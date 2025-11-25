@@ -228,30 +228,33 @@ class Controller:
         # self.velocity_left and self.velocity_right are in range [-1, 1]
 
         FOLLOW_LINE_WEIGHT = 1
-        OBSTACLE_AVOIDANCE_WEIGHT = 0.10
+        OBSTACLE_AVOIDANCE_WEIGHT = 0.15
 
         printing = self.is_printing()
 
         forwardFitness = (self.velocity_left + self.velocity_right) / 2
-        followLineFitness = max(0.4, gs_left - gs_right)
+        if forwardFitness > 0:
+            forwardFitness = forwardFitness ** (1/2)
+        followLineFitness = max(0.4, gs_right)
+        followLineFitness -= max(0.2, gs_left)
         avoidCollisionFitness = 0
         for ds in self.inputs[3:11]:
-            avoidCollisionFitness = max(avoidCollisionFitness, ds)
-        # if avoidCollisionFitness > 0:
-        #     self.steps_avoiding += 1
-        # else:
-        #     self.steps_avoiding = 0
-        spinningFitness = 1 - (abs(self.velocity_left - self.velocity_right) / 2) ** (1/5)
+            avoidCollisionFitness += ds
+        avoidCollisionFitness = min(1, avoidCollisionFitness)
+        if avoidCollisionFitness > 0:
+            self.steps_avoiding += 1
+        else:
+            if self.steps_avoiding > 0:
+                self.steps_avoiding -= 2
+            else:
+                self.steps_avoiding = 0
+        wheelDiff = abs(self.velocity_left - self.velocity_right) / 2
+        spinningFitness = (2 - 3 ** (wheelDiff)) / 1 # 0.51 - 0.64
+        # spinningFitness = (3 - 3 ** (wheelDiff)) / 2 # 0.53 - 0.68
 
         lineFitness = forwardFitness * followLineFitness * spinningFitness * (1 - avoidCollisionFitness)
-        collisionFitness = 1
-        if avoidCollisionFitness > 0.2:
-            collisionFitness *= max(1, -math.log2(avoidCollisionFitness))
-        else:
-            collisionFitness *= 0
-
-        lineFitness *= FOLLOW_LINE_WEIGHT
-        collisionFitness *= OBSTACLE_AVOIDANCE_WEIGHT
+        collisionFitness = avoidCollisionFitness * OBSTACLE_AVOIDANCE_WEIGHT
+        # * max(0.8, min(1, (1.2 - self.steps_avoiding / 1000)))
 
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = lineFitness + collisionFitness
