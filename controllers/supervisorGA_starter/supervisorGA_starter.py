@@ -323,7 +323,7 @@ if __name__ == "__main__":
                 "Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )
         elif resp == 81 or resp == 65619:  # Q or q key
-            gaModel.run_demo("g5pop0.npy")
+            gaModel.run_demo("g199pop0.npy")
             print(
                 "Reference: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )

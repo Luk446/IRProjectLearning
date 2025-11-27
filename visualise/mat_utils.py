@@ -3,6 +3,7 @@ import colorsys
 import re
 from datetime import datetime
 
+# AI GENERATED HELPER FUNCTIONS
 
 def get_latest_robot_position_folder(dir, id=0):
     files = [f for f in os.listdir(dir) if re.match(r"\d{8}-\d{6}$", f)]

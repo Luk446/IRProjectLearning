@@ -7,6 +7,8 @@ from matplotlib.animation import FuncAnimation
 from mat_utils import brighten_color, get_latest_robot_position_folder
 import sys
 
+# AI ASSISTED VISUALISER
+
 # --- Initial parameters ---
 directory = "../controllers/supervisorGA_starter/data/"
 if len(sys.argv) > 1:
@@ -85,20 +87,20 @@ ax.set_ybound(-0.9, 0.9)
 arrows = []
 
 # --- Slider for generation ---
-ax_gen = plt.axes([0.1, 0.2, 0.65, 0.03])
+ax_gen = plt.axes([0.12, 0.2, 0.63, 0.03])
 slider_gen = Slider(
     ax_gen, "Generation", gen_min, gen_max, valinit=initial_gen, valstep=1
 )
 
 # --- Slider for downsampling ---
-ax_down_sample_step = plt.axes([0.1, 0.15, 0.65, 0.03])
+ax_down_sample_step = plt.axes([0.12, 0.15, 0.63, 0.03])
 slider_downsample_step = Slider(
-    ax_down_sample_step, "Downsample Step", 1, 50, valinit=initial_step, valstep=1
+    ax_down_sample_step, "Downsample", 1, 50, valinit=initial_step, valstep=1
 )
 
 
 # --- Slider for population (single numeric picker) ---
-ax_pop = plt.axes([0.1, 0.10, 0.65, 0.03])
+ax_pop = plt.axes([0.12, 0.10, 0.63, 0.03])
 slider_pop = Slider(
     ax_pop,
     "Population ID",
@@ -109,13 +111,13 @@ slider_pop = Slider(
 )
 
 # --- Checkbox for orientation ---
-ax_select_bests_check = plt.axes([0.8, 0.90, 0.12, 0.05])
+ax_select_bests_check = plt.axes([0.6, 0.25, 0.12, 0.05])
 orientation_check = CheckButtons(
     ax_select_bests_check, ["Orientation"], [show_orientation]
 )
 
 # --- Multi-selector for populations (checkbox list) ---
-ax_pop_list = plt.axes([0.80, 0.35, 0.15, 0.50])
+ax_pop_list = plt.axes([0.73, 0.35, 0.15, 0.57])
 pop_labels = [str(p) + "  " for p in populations_all]
 selected_pop_states = [False] * len(pop_labels)
 pop_check = CheckButtons(ax_pop_list, pop_labels, selected_pop_states)
@@ -138,7 +140,7 @@ clear_button = Button(ax_clear_button, "Clear Selections")
 ax_animate_check = plt.axes([0.8, 0.06, 0.15, 0.05])
 animate_check = CheckButtons(ax_animate_check, ["Animate"], [False])
 
-ax_frame = plt.axes([0.1, 0.01, 0.65, 0.03])
+ax_frame = plt.axes([0.12, 0.01, 0.63, 0.03])
 slider_anim_frame = Slider(ax_frame, "Animation Frame", 0, 0, valinit=0, valstep=1)
 
 # ax_play_button = plt.axes([0.8, 0.00, 0.07, 0.04])
@@ -270,12 +272,8 @@ def update(val):
         sc.set_offsets(np.empty((0, 2)))
         sc.set_array(np.array([]))
 
-    # ax.set_title(
-    #     f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points"
-    # )
-
     ax.set_title(
-        f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points",
+        f"Generation {gen} — {len(selected_pops_local)} populations - {len(df_new)} points",
         pad=20,
     )
 
@@ -475,6 +473,7 @@ def update_annot(idx, df_source, x, y):
 
     # One index can give multiple rows if there are duplicates; take the first
     row_count = len(df_source[(df_source["x"] == x) & (df_source["y"] == y)])
+    avg_fitnesses = df_source.groupby("population")["fitness"].mean().to_dict()
 
     p = int(row["population"])
 

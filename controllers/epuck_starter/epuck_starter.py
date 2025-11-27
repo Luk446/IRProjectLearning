@@ -2,7 +2,6 @@ from controller import Robot, Motor, DistanceSensor
 import numpy as np
 import mlp as ntw
 from typing import List
-import math
 
 HIDDEN_LAYERS = [12, 6]
 MIN_GROUND_SENSOR_VALUE = 280  # Black -> 0
@@ -10,7 +9,6 @@ MAX_GROUND_SENSOR_VALUE = 760  # White -> 1
 MIN_DISTANCE_SENSOR_VALUE = 78  # No obstacle -> 0
 MAX_DISTANCE_SENSOR_VALUE = 175  # Very close obstacle -> 1
 PRINT_EVERY = 1000  # Print every n steps
-
 
 class Controller:
     def __init__(self, robot: Robot):
@@ -116,7 +114,6 @@ class Controller:
         self.max_steps_on_line = 0
         self.steps_on_line_tolerance = 0
         self.has_lost_line = False
-        self.steps_avoiding = 0
         self.max_spin = 0
 
         self.print_every = 0
@@ -215,20 +212,8 @@ class Controller:
         gs_center = 1 - self.inputs[1]
         gs_right = 1 - self.inputs[2]
 
-        # No obstacle = 0, Very close obstacle = 1
-        ds_front_right = self.inputs[6]
-        ds_front_right_bis = self.inputs[5]
-        ds_right = self.inputs[4]
-        ds_back_right = self.inputs[3]
-        ds_front_left = self.inputs[10]
-        ds_front_left_bis = self.inputs[9]
-        ds_left = self.inputs[8]
-        ds_back_left = self.inputs[7]
-
         # self.velocity_left and self.velocity_right are in range [-1, 1]
-
-        FOLLOW_LINE_WEIGHT = 1
-        OBSTACLE_AVOIDANCE_WEIGHT = 0.15
+        OBSTACLE_AVOIDANCE_WEIGHT = 0.20
 
         printing = self.is_printing()
 
@@ -237,25 +222,15 @@ class Controller:
             forwardFitness = forwardFitness ** (1/2)
         followLineFitness = max(0.4, gs_right)
         followLineFitness -= max(0.2, gs_left)
+        # No obstacle = 0, Very close obstacle = 1
         avoidCollisionFitness = 0
         for ds in self.inputs[3:11]:
             avoidCollisionFitness += ds
         avoidCollisionFitness = min(1, avoidCollisionFitness)
-        if avoidCollisionFitness > 0:
-            self.steps_avoiding += 1
-        else:
-            if self.steps_avoiding > 0:
-                self.steps_avoiding -= 2
-            else:
-                self.steps_avoiding = 0
         wheelDiff = abs(self.velocity_left - self.velocity_right) / 2
-        spinningFitness = (2 - 3 ** (wheelDiff)) / 1 # 0.51 - 0.64
-        # spinningFitness = (3 - 3 ** (wheelDiff)) / 2 # 0.53 - 0.68
-
+        spinningFitness = (2 - 3 ** (wheelDiff)) / 1
         lineFitness = forwardFitness * followLineFitness * spinningFitness * (1 - avoidCollisionFitness)
         collisionFitness = avoidCollisionFitness * OBSTACLE_AVOIDANCE_WEIGHT
-        # * max(0.8, min(1, (1.2 - self.steps_avoiding / 1000)))
-
         ### Define the fitness function of this iteration which should be a combination of the previous functions
         combinedFitness = lineFitness + collisionFitness
 
