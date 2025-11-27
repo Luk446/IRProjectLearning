@@ -1,8 +1,0 @@
-{
-    "num_generations": 50,
-    "population_size": 20,
-    "num_elite": 3,
-    "crossover_rate": 50,
-    "tournament_k": 5,
-    "mutation_rate": 20
-}

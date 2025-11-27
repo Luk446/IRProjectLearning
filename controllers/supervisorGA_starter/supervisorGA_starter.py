@@ -19,7 +19,8 @@ from ga_parameters import (
     INITIAL_TRANS,
     CROSSOVER_RATE,
     TOURNAMENT_K,
-    MUTATION_RATE
+    MUTATION_RATE,
+    EXPERIMENT_TIME
 )
 
 import time
@@ -28,7 +29,7 @@ class SupervisorGA:
         # Simulation Parameters
         # Please, do not change these parameters
         self.time_step = 32  # ms
-        self.time_experiment = 300  # s
+        self.time_experiment = EXPERIMENT_TIME  # s
 
         # Initiate Supervisor Module
         self.supervisor = Supervisor()
@@ -75,7 +76,7 @@ class SupervisorGA:
         self.display.drawText("Fitness (Best - Red)", 0, 0)
         self.display.drawText("Fitness (Average - Green)", 0, 10)
 
-        self.data_filename = ""
+        self.data_foldername = ""
 
     def createRandomPopulation(self, genotype=None):
         # Wait until the supervisor receives the size of the genotypes (number of weights)
@@ -109,7 +110,7 @@ class SupervisorGA:
                 if float_list_str:
                     self.receivedCurrentFitness = [float(item) for item in float_list_str.split(',')]
                 else:
-                    self.receivedCurrentFitness = [0.0, 0.0, 0.0, 0.0, 0.0]
+                    self.receivedCurrentFitness = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 # print("Received Fitness:", self.receivedFitness)
             self.receiver.nextPacket()
 
@@ -137,10 +138,12 @@ class SupervisorGA:
             robot_orientation = self.robot_node.getOrientation()
             robot_state = {
                 "fitness": round(self.receivedCurrentFitness[0], 2),
-                "forward_fitness": round(self.receivedCurrentFitness[1], 2),
-                "line_fitness": round(self.receivedCurrentFitness[2], 2),
-                "collision_fitness": round(self.receivedCurrentFitness[3], 2),
-                "spinning_fitness": round(self.receivedCurrentFitness[4], 2),
+                "line_fitness": round(self.receivedCurrentFitness[1], 2),
+                "collision_fitness": round(self.receivedCurrentFitness[2], 2),
+                "forward_fitness": round(self.receivedCurrentFitness[3], 2),
+                "follow_line_fitness": round(self.receivedCurrentFitness[4], 2),
+                "avoid_collision_fitness": round(self.receivedCurrentFitness[5], 2),
+                "spinning_fitness": round(self.receivedCurrentFitness[6], 2),
                 "x": round(robot_pos[0], 2),
                 "y": round(robot_pos[1], 2),
                 "ox": round(robot_orientation[0], 2),
@@ -165,7 +168,8 @@ class SupervisorGA:
             state["population"] = population
 
         df = pd.DataFrame(robot_state_list)
-        df.to_csv(self.data_filename, mode="a", index=False, header=not os.path.exists(self.data_filename))
+        robot_pos_filename = self.data_foldername + "robot_position.csv"
+        df.to_csv(robot_pos_filename, mode="a", index=False, header=not os.path.exists(robot_pos_filename))
 
         # Measure fitness
         fitness = self.receivedFitness
@@ -183,8 +187,13 @@ class SupervisorGA:
             }
         )
 
-        genome_filename = self.data_filename.replace("robot_position", "genome_data")
+        genome_filename = self.data_foldername + "genome_data.csv"
         df_genome.to_csv(genome_filename, mode="a", index=False, header=not os.path.exists(genome_filename))
+        os.makedirs(self.data_foldername + "genomes/genotype/gen{}".format(generation), exist_ok=True)
+        numpy.save(
+            self.data_foldername + "genomes/genotype/gen{}/g{}pop{}.npy".format(generation, generation, population),
+            genotype,
+        )
 
         del robot_state_list
         del df
@@ -193,10 +202,10 @@ class SupervisorGA:
 
         return fitness
 
-    def run_demo(self):
+    def run_demo(self, robot_file="Best.npy"):
         print("Running Best Individual Demo ...\n")
         # Read File
-        genotype = numpy.load("Best8.npy")
+        genotype = numpy.load(robot_file)
         # Send Genotype to controller
         self.emitterData = str(genotype)
 
@@ -211,6 +220,10 @@ class SupervisorGA:
         # Evaluation genotype
         self.run_seconds(self.time_experiment)
 
+        # Measure fitness
+        fitness = self.receivedFitness
+        print(f"X.Fitness: {fitness:.2f}")
+
     def run_optimization(self):
         # Wait until the number of weights is updated
         while self.num_weights == 0:
@@ -219,7 +232,7 @@ class SupervisorGA:
 
         print("starting GA optimization ...\n")
         # Time for filename
-        self.data_filename = "data/robot_position_{}.csv".format(time.strftime("%Y%m%d-%H%M%S"))
+        self.data_foldername = "data/{}/".format(time.strftime("%Y%m%d-%H%M%S"))
         # store GA hyperparameters
         hyperparameters = {
             "num_generations": self.num_generations,
@@ -229,7 +242,10 @@ class SupervisorGA:
             "tournament_k": TOURNAMENT_K,
             "mutation_rate": MUTATION_RATE,
         }
-        with open(self.data_filename.replace("robot_position", "ga_parameters").replace(".csv", ".json"), "w") as f:
+        os.makedirs(self.data_foldername, exist_ok=True)
+        os.makedirs(self.data_foldername + "genomes/", exist_ok=True)
+        ga_params_filename = self.data_foldername + "ga_parameters.json"
+        with open(ga_params_filename, "w") as f:
             json.dump(hyperparameters, f, indent=4)
 
         # For each Generation
@@ -258,7 +274,7 @@ class SupervisorGA:
                     current_population, self.num_elite
                 )
 
-        print(f"GA optimization terminated, saved data to {self.data_filename}\n")
+        print(f"GA optimization terminated, saved data to {self.data_foldername}\n")
 
     def draw_scaled_line(self, generation, y1, y2):
         # Define the scale of the fitness plot
@@ -302,8 +318,17 @@ if __name__ == "__main__":
                 "Optimization: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )
         elif resp == 82 or resp == 65619:  # R or r key
-            # gaModel.run_demo()
             gaModel.run_demo()
             print(
                 "Demo: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
+            )
+        elif resp == 81 or resp == 65619:  # Q or q key
+            gaModel.run_demo("g199pop0.npy")
+            print(
+                "Reference: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
+            )
+        elif resp == 80 or resp == 65619:  # P or p key
+            gaModel.run_demo("bad_bf.npy")
+            print(
+                "Reference: (R|r)un Best Individual or (S|s)earch for New Best Individual:"
             )

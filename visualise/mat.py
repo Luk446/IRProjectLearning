@@ -4,18 +4,28 @@ from matplotlib.widgets import Slider, CheckButtons, Button
 import numpy as np
 from matplotlib import colors
 from matplotlib.animation import FuncAnimation
-from mat_utils import brighten_color, get_latest_robot_position_file
+from mat_utils import brighten_color, get_latest_robot_position_folder
 import sys
+
+# AI ASSISTED VISUALISER
 
 # --- Initial parameters ---
 directory = "../controllers/supervisorGA_starter/data/"
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    arg = sys.argv[1]
+    # if "dir" is -1, takes the 1 and not 0, if "dir" is -2, takes the 2 and not 1, ...
+    try:
+        id = int(arg)
+    except ValueError:
+        pass
+    if isinstance(id, int):
+        foldername = get_latest_robot_position_folder(directory, id=abs(id))
+    else:
+        foldername = str(arg)
 else:
-    filename = get_latest_robot_position_file(directory)
-csv_file = f"{directory}{filename}"
-gen_filename = filename.replace("robot_positions_", "generation_data_")
-gen_csv_file = f"{directory}{gen_filename}"
+    foldername = get_latest_robot_position_folder(directory)
+csv_file = f"{directory}{foldername}/robot_position.csv"
+gen_csv_file = f"{directory}{foldername}/genome_data.csv"
 df_info = pd.read_csv(csv_file, usecols=["generation", "population"])
 df_new_global = None  # for hover annotation
 df_gen_info = pd.read_csv(gen_csv_file)
@@ -31,7 +41,7 @@ is_selecting_bests = False
 selected_pops = populations_all  # default = all
 select_top_count = 5
 MARKER_SIZE = 30  # increased for single-point-per-pop animation
-MARKER_OPACITY = 0.2
+MARKER_OPACITY = 0.4
 SELECT_REAL_TOP = True
 
 # --- Load first generation ---
@@ -47,6 +57,7 @@ def load_generation_mem(generation, pops, step):
         dfg = dfg[dfg["population"].isin(pops)]
     return dfg.iloc[::step]
 
+
 def load_generation_info_mem(generation):
     """Return generation info row for generation."""
     dfg = df_gen_info[df_gen_info["generation"] == generation]
@@ -55,6 +66,7 @@ def load_generation_info_mem(generation):
 
 # --- Plot setup ---
 fig, ax = plt.subplots(figsize=(10, 8))
+fig.canvas.manager.set_window_title(foldername)
 plt.subplots_adjust(left=0.1, bottom=0.40, right=0.7)  # space for widgets
 
 sc = ax.scatter(
@@ -75,35 +87,37 @@ ax.set_ybound(-0.9, 0.9)
 arrows = []
 
 # --- Slider for generation ---
-ax_gen = plt.axes([0.1, 0.2, 0.65, 0.03])
+ax_gen = plt.axes([0.12, 0.2, 0.63, 0.03])
 slider_gen = Slider(
     ax_gen, "Generation", gen_min, gen_max, valinit=initial_gen, valstep=1
 )
 
 # --- Slider for downsampling ---
-ax_step = plt.axes([0.1, 0.15, 0.65, 0.03])
-slider_step = Slider(ax_step, "Downsample Step", 1, 50, valinit=initial_step, valstep=1)
+ax_down_sample_step = plt.axes([0.12, 0.15, 0.63, 0.03])
+slider_downsample_step = Slider(
+    ax_down_sample_step, "Downsample", 1, 50, valinit=initial_step, valstep=1
+)
 
 
 # --- Slider for population (single numeric picker) ---
-ax_pop = plt.axes([0.1, 0.10, 0.65, 0.03])
+ax_pop = plt.axes([0.12, 0.10, 0.63, 0.03])
 slider_pop = Slider(
     ax_pop,
     "Population ID",
-    populations_all[0],
+    -1,
     populations_all[-1],
-    valinit=populations_all[0],
+    valinit=-1,
     valstep=1,
 )
 
 # --- Checkbox for orientation ---
-ax_select_bests_check = plt.axes([0.8, 0.90, 0.12, 0.05])
+ax_select_bests_check = plt.axes([0.6, 0.25, 0.12, 0.05])
 orientation_check = CheckButtons(
     ax_select_bests_check, ["Orientation"], [show_orientation]
 )
 
 # --- Multi-selector for populations (checkbox list) ---
-ax_pop_list = plt.axes([0.80, 0.35, 0.15, 0.50])
+ax_pop_list = plt.axes([0.73, 0.35, 0.15, 0.57])
 pop_labels = [str(p) + "  " for p in populations_all]
 selected_pop_states = [False] * len(pop_labels)
 pop_check = CheckButtons(ax_pop_list, pop_labels, selected_pop_states)
@@ -126,7 +140,7 @@ clear_button = Button(ax_clear_button, "Clear Selections")
 ax_animate_check = plt.axes([0.8, 0.06, 0.15, 0.05])
 animate_check = CheckButtons(ax_animate_check, ["Animate"], [False])
 
-ax_frame = plt.axes([0.1, 0.01, 0.65, 0.03])
+ax_frame = plt.axes([0.12, 0.01, 0.63, 0.03])
 slider_anim_frame = Slider(ax_frame, "Animation Frame", 0, 0, valinit=0, valstep=1)
 
 # ax_play_button = plt.axes([0.8, 0.00, 0.07, 0.04])
@@ -145,16 +159,20 @@ anim_generation_locked = (
     initial_gen  # which generation animates (kept in sync with slider_gen at start)
 )
 
+step_button.ax.set_visible(False)
+slider_anim_frame.ax.set_visible(False)
+
 # --- Hover annotation ---
 annot = ax.annotate(
     "",
     xy=(0, 0),
-    xytext=(-150, -90),
+    xytext=(-130, -90),
     textcoords="offset points",
     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", lw=1),
     arrowprops=dict(arrowstyle="->"),
 )
 annot.set_visible(False)
+
 
 def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     """
@@ -198,6 +216,7 @@ def build_animation_data(generation, selected_pop_list, per_pop_downsample=1):
     if anim_max_frames == 0:
         anim_max_frames = 1
 
+
 def update(val):
     """
     Original update used for static view. Also rebuilds animation data when generation
@@ -205,7 +224,7 @@ def update(val):
     """
     global anim_generation_locked
     gen = int(slider_gen.val)
-    step = int(slider_step.val)
+    step = int(slider_downsample_step.val)
 
     # Build selected populations list from checkboxes + slider_pop
     selected_pops_local = [
@@ -215,7 +234,9 @@ def update(val):
     ]
     # include slider_pop single picker as well
     try:
-        selected_pops_local.append(int(slider_pop.val))
+        val = int(slider_pop.val)
+        if val != -1:
+            selected_pops_local.append(val)
     except Exception:
         pass
     # unique
@@ -251,12 +272,8 @@ def update(val):
         sc.set_offsets(np.empty((0, 2)))
         sc.set_array(np.array([]))
 
-    # ax.set_title(
-    #     f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points"
-    # )
-    
     ax.set_title(
-        f"Generation {gen} — {len(selected_pops_local)} populations — {len(df_new)} points",
+        f"Generation {gen} — {len(selected_pops_local)} populations - {len(df_new)} points",
         pad=20,
     )
 
@@ -319,6 +336,8 @@ def update(val):
 
 # --- Button callback to select all ---
 def select_all(event):
+    if select_bests_check.get_status()[0]:
+        select_bests_check.set_active(0)
     for i in range(len(pop_labels)):
         if not pop_check.get_status()[i]:
             pop_check.set_active(i)
@@ -327,7 +346,8 @@ def select_all(event):
 
 # --- Button callback to clear selections ---
 def clear_selections(event):
-    select_bests_check.set_active(0, False)  # uncheck "select top"
+    if select_bests_check.get_status()[0]:
+        select_bests_check.set_active(0)
     for i in range(len(pop_labels)):
         if pop_check.get_status()[i]:
             pop_check.set_active(i)
@@ -404,10 +424,12 @@ def animate_frame(i):
     slider_anim_frame.set_val(anim_frame)
     return (sc,)
 
+
 def toggle_animation(label):
     # when checkbox toggled
     if animate_check.get_status()[0]:
         # ensure anim_data is present (rebuild if necessary)
+        val = int(slider_pop.val)
         build_animation_data(
             slider_gen.val,
             [
@@ -415,22 +437,26 @@ def toggle_animation(label):
                 for lbl, state in zip(pop_labels, pop_check.get_status())
                 if state
             ]
-            + [int(slider_pop.val)],
+            + [val]
+            if val != -1
+            else [],
             per_pop_downsample=1,
         )
+        step_button.ax.set_visible(True)
+        slider_anim_frame.ax.set_visible(True)
     else:
         # stop_animation()
+        step_button.ax.set_visible(False)
+        slider_anim_frame.ax.set_visible(False)
         # restore static rendering for current generation & selection
         update(None)
+
 
 def step_once(event):
     # advance one animation frame (works even if not animating)
     global anim_frame
-    # ensure anim_data exists
-    if anim_data is None or len(anim_data) == 0:
-        # nothing to step
-        return
     anim_frame = (anim_frame + 1) % max(1, anim_max_frames)
+    slider_anim_frame.set_val(anim_frame)
     render_animation_frame(anim_frame)
 
 
@@ -439,6 +465,7 @@ def on_anim_slider_changed(val):
     anim_frame = int(val)
     render_animation_frame(anim_frame)
 
+
 def update_annot(idx, df_source, x, y):
     """Update annotation text and position."""
     # get real row from df_source (df_new in static mode, or anim frame data)
@@ -446,13 +473,18 @@ def update_annot(idx, df_source, x, y):
 
     # One index can give multiple rows if there are duplicates; take the first
     row_count = len(df_source[(df_source["x"] == x) & (df_source["y"] == y)])
+    avg_fitnesses = df_source.groupby("population")["fitness"].mean().to_dict()
+
+    p = int(row["population"])
 
     text = (
-        f"Population: {row['population']}\n"
+        f"Population: {p} - {avg_fitnesses.get(p, 0):.2f}\n"
         f"Fitness: {row['fitness']:.3f}\n"
-        f"Forward: {row['forward_fitness']:.3f}\n"
         f"Line: {row['line_fitness']:.3f}\n"
         f"Collision: {row['collision_fitness']:.3f}\n"
+        f"Forward: {row['forward_fitness']:.3f}\n"
+        f"Follow Line: {row['follow_line_fitness']:.3f}\n"
+        f"Avoid Collision: {row['avoid_collision_fitness']:.3f}\n"
         f"Spinning: {row['spinning_fitness']:.3f}\n"
         f"X: {row['x']:.3f}\n"
         f"Y: {row['y']:.3f}\n"
@@ -463,6 +495,7 @@ def update_annot(idx, df_source, x, y):
     annot.set_text(text)
     annot.get_bbox_patch().set_facecolor("white")
     annot.get_bbox_patch().set_alpha(0.9)
+
 
 def on_hover(event):
     if event.inaxes != ax:
@@ -483,9 +516,36 @@ def on_hover(event):
             annot.set_visible(False)
             fig.canvas.draw_idle()
 
+
+def on_point_click(event):
+    if event.inaxes != ax:
+        return
+
+    if select_bests_check.get_status()[0]:
+        select_bests_check.set_active(0)
+
+    cont, ind = sc.contains(event)
+    if cont:
+        idx = ind["ind"][0]
+        x, y = sc.get_offsets()[idx]
+        # find population of this point
+        row = df_new_global.iloc[idx]
+        p = int(row["population"])
+        # toggle selection of this population
+        for i, lbl in enumerate(pop_labels):
+            pop_id = int(lbl.strip())
+            status = pop_check.get_status()[i]
+            if pop_id == p:
+                if not status:
+                    pop_check.set_active(i)
+            elif status:
+                pop_check.set_active(i)
+        update(None)
+
+
 # Connect controls
 slider_gen.on_changed(update)
-slider_step.on_changed(update)
+slider_downsample_step.on_changed(update)
 slider_pop.on_changed(update)
 orientation_check.on_clicked(lambda label: update(None))
 pop_check.on_clicked(lambda label: update(None))
@@ -498,6 +558,7 @@ step_button.on_clicked(step_once)
 slider_anim_frame.on_changed(on_anim_slider_changed)
 
 fig.canvas.mpl_connect("motion_notify_event", on_hover)
+fig.canvas.mpl_connect("button_press_event", on_point_click)
 
 
 # initial build
